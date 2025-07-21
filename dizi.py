@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 BASE_URL = "https://dizifun4.com"
-PROXY_BASE_URL = "https://proxydizifun.vercel.app/api/proxy.js"
+PROXY_BASE_URL = "https://mehmetey3.serv00.net/dizifunproxy.php"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -32,7 +32,7 @@ def create_proxy_url(original_url):
         return None
     
     # Proxy URL oluştur
-    proxy_url = f"{PROXY_BASE_URL}?referer={BASE_URL}&url={original_url}"
+    proxy_url = f"{PROXY_BASE_URL}?url={original_url}"
     logger.info(f"[PROXY] {original_url} -> {proxy_url}")
     return proxy_url
 
