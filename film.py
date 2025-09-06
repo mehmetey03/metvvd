@@ -14,8 +14,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-BASE_URL = "https://dizifun4.com"
-PROXY_BASE = https://mehmetey3.serv00.net/dizifunproxy.php"
+BASE_URL = "https://dizifun5.com/filmler"
+PROXY_BASE = "https://mehmetey3.serv00.net/dizifunproxy.php/?url="  # PROXY ADRESİ DEĞİŞTİRİLDİ
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -36,7 +36,7 @@ def create_proxy_url(original_url):
         return original_url
     
     
-    proxy_url = f"{PROXY_BASE}?url={original_url}"
+    proxy_url = f"{PROXY_BASE}{original_url}"  # BASİT BİR ŞEKİLDE DEĞİŞTİRİLDİ
     logger.info(f"[+] Proxy URL oluşturuldu: {proxy_url}")
     return proxy_url
 
@@ -317,7 +317,7 @@ async def get_movies_from_homepage():
     async with aiohttp.ClientSession() as session:
         all_movie_links = []
         page_num = 1
-        max_pages = 100  
+        max_pages = 1000  # TÜM SAYFALARI TARAMAK İÇİN YÜKSEK BİR SINIR
         
         while page_num <= max_pages:
             movie_links, has_next_page = await get_movies_from_page(session, page_num)
@@ -503,7 +503,7 @@ async def extract_m3u8_from_movie(session, movie_url):
     
     return None
 
-async def process_movies(all_movie_links, output_filename="filmfun.m3u"):
+async def process_movies(all_movie_links, output_filename="filmler.m3u"):
     """Tüm filmleri tek bir dosyaya yazar"""
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10)) as session:
         with open(output_filename, "w", encoding="utf-8") as f:
