@@ -16,7 +16,7 @@ PAGES_TO_SCRAPE = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 DELAY_BETWEEN_FILMS = float(sys.argv[2]) if len(sys.argv) > 2 else 0.05  # Çok daha düşük
 
 BASE_URL = "https://www.hdfilmcehennemi.com"
-GITHUB_JSON_URL = "https://raw.githubusercontent.com/sevdimcim/vod-max/refs/heads/main/hdfilmcehennemi.json"
+GITHUB_JSON_URL = "https://raw.githubusercontent.com/mehmetey03/metvvd/refs/heads/main/hdfilmcehennemi.json"
 
 # Daha agresif header ayarları
 HEADERS_PAGE = {
