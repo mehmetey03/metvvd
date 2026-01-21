@@ -627,7 +627,7 @@ def create_html_file(data):
     </div>
 
     <div class="filmpaneldis" id="diziListesiContainer">
-        <div class="baslik">YERLİ DİZİLER VOD BÖLÜM</div>
+        <div class="baslik">SHOWTV DİZİLERİ</div>
     </div>
 
     <div id="bolumler" class="bolum-container hidden">
