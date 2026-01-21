@@ -265,7 +265,7 @@ def create_html_file(embedded_data, total_film_count):
     html_template = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>TITAN TV FİLM VOD</title>
+    <title>ME TV FİLM VOD</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css?family=PT+Sans:700i" rel="stylesheet">
@@ -495,8 +495,8 @@ def create_html_file(embedded_data, total_film_count):
 <body>
     <div class="aramapanel">
         <div class="aramapanelsol">
-            <div class="logo"><img src="https://i.hizliresim.com/t75soiq.png"></div>
-            <div class="logoisim">TITAN TV</div>
+            <div class="logo"><img src="https://i.hizliresim.com/t6e66bt.png"></div>
+            <div class="logoisim">ME TV</div>
         </div>
         <div class="aramapanelsag">
             <form action="" name="ara" method="GET" onsubmit="return false;">
