@@ -78,12 +78,12 @@ jobs:
           FILM_COUNT=$(python3 -c "import json; data=json.load(open('hdfilmcehennemi.json')); print(len(data))")
           echo "- **JSON File Size:** ${JSON_KB} KB" >> $GITHUB_STEP_SUMMARY
           echo "- **Total Films:** ${FILM_COUNT}" >> $GITHUB_STEP_SUMMARY
-          echo "- **JSON URL:** https://raw.githubusercontent.com/sevdimcim/vod-max/refs/heads/main/hdfilmcehennemi.json" >> $GITHUB_STEP_SUMMARY
+          echo "- **JSON URL:** https://" >> $GITHUB_STEP_SUMMARY
         fi
         
         if [ -f "hdfilmcehennemi.html" ]; then
           HTML_SIZE=$(stat -c%s "hdfilmcehennemi.html")
           HTML_KB=$((HTML_SIZE / 1024))
           echo "- **HTML File Size:** ${HTML_KB} KB" >> $GITHUB_STEP_SUMMARY
-          echo "- **Live Preview:** https://sevdimcim.github.io/vod-max/" >> $GITHUB_STEP_SUMMARY
+          echo "- **Live Preview:** https://" >> $GITHUB_STEP_SUMMARY
         fi
