@@ -4,9 +4,7 @@ import json
 import time
 import re
 import os
-import subprocess
 import logging
-from urllib.parse import urljoin, urlparse
 
 # --- LOG AYARLARI ---
 logging.basicConfig(
@@ -19,7 +17,6 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.nowtv.com.tr"
 MAIN_URL = "https://www.nowtv.com.tr/dizi-arsivi"
 
-# --- YARDIMCI FONKSİYONLAR ---
 def slugify(text):
     if not text: return ""
     mapping = {'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u', 'Ç': 'c', 'Ğ': 'g', 'İ': 'i', 'Ö': 'o', 'Ş': 's', 'Ü': 'u'}
@@ -38,26 +35,7 @@ def clean_url(url):
     elif not url.startswith(('http://', 'https://')): url = BASE_URL + '/' + url.lstrip('/')
     return url
 
-def commit_and_push(file_name):
-    """GitHub Actions ortamında çalışıyorsa otomatik push yapar."""
-    if not (os.getenv('GITHUB_ACTIONS') == 'true'):
-        return
-    try:
-        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-        subprocess.run(["git", "add", file_name], check=True)
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
-        if status:
-            commit_msg = f"🔄 Arşiv Güncellendi - {time.strftime('%Y-%m-%d %H:%M')}"
-            subprocess.run(["git", "commit", "-m", commit_msg], check=True)
-            subprocess.run(["git", "push"], check=True)
-            logger.info("🚀 GitHub'a pushlandı.")
-    except Exception as e:
-        logger.error(f"Git hatası: {e}")
-
-# --- SCRAPER MANTIĞI ---
 def extract_series_info(scraper, series_url):
-    """Dizi sayfasındaki bölümleri bulur."""
     try:
         resp = scraper.get(series_url, timeout=20)
         if resp.status_code != 200: return []
@@ -65,14 +43,14 @@ def extract_series_info(scraper, series_url):
         soup = BeautifulSoup(resp.text, 'html.parser')
         episodes = []
         
-        # NowTV'nin genel kart yapısını hedef alıyoruz
+        # NowTV bölüm kartlarını hedefle
         items = soup.select('.video-item, .list-item, a[href*="/bolumler/"]')
         for item in items:
             link_elem = item if item.name == 'a' else item.find('a', href=True)
             if not link_elem: continue
             
             ep_url = clean_url(link_elem['href'])
-            if "/bolum" not in ep_url: continue # Sadece bölüm linklerini al
+            if "/bolum" not in ep_url: continue 
             
             title_elem = item.select_one('.title, h3, .program-name')
             title = title_elem.get_text(strip=True) if title_elem else "Bölüm"
@@ -82,70 +60,11 @@ def extract_series_info(scraper, series_url):
             
             episodes.append({"ad": title, "link": ep_url, "thumbnail": thumb})
         
-        return episodes[::-1] # Eskiden yeniye sırala
+        return episodes[::-1]
     except Exception as e:
         logger.error(f"Dizi detay hatası: {e}")
         return []
 
-def run_scraper():
-    logger.info("🚀 Scraper Başlatıldı...")
-    scraper = cloudscraper.create_scraper(
-        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-    )
-    
-    try:
-        response = scraper.get(MAIN_URL, timeout=30)
-        if response.status_code != 200:
-            logger.error(f"Ana sayfa hatası: {response.status_code}")
-            return
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-        series_data = {}
-        
-        # Arşivdeki dizi kartlarını bul
-        cards = soup.select('.list-item, .program-card')
-        logger.info(f"Bulunan potansiyel dizi kartı sayısı: {len(cards)}")
-
-        for card in cards:
-            link_elem = card.find('a', href=True)
-            if not link_elem: continue
-            
-            s_url = clean_url(link_elem['href'])
-            name_elem = card.select_one('.program-name, .title, h2, h3')
-            s_name = name_elem.get_text(strip=True) if name_elem else "Bilinmeyen Dizi"
-            s_id = slugify(s_name)
-            
-            if s_id in series_data: continue
-
-            img_elem = card.find('img')
-            img = clean_url(img_elem.get('src') or img_elem.get('data-src', '')) if img_elem else ""
-            
-            logger.info(f"🔍 İşleniyor: {s_name}")
-            eps = extract_series_info(scraper, s_url)
-            
-            if eps:
-                series_data[s_id] = {
-                    "isim": s_name,
-                    "resim": img,
-                    "link": s_url,
-                    "bolumler": eps
-                }
-                logger.info(f"   ✅ {len(eps)} bölüm eklendi.")
-            
-            time.sleep(1) # Banlanmamak için kısa bekleme
-
-        # Veriyi kaydet
-        with open("nowtv_data.json", "w", encoding="utf-8") as f:
-            json.dump(series_data, f, ensure_ascii=False, indent=2)
-            
-        create_html(series_data)
-        commit_and_push("nowtv_vod.html")
-        logger.info("🎉 Tüm işlemler başarıyla tamamlandı!")
-
-    except Exception as e:
-        logger.error(f"Genel hata: {e}")
-
-# --- HTML OLUŞTURUCU ---
 def create_html(series_data):
     json_data = json.dumps(series_data, ensure_ascii=False)
     html_content = f'''<!DOCTYPE html>
@@ -158,44 +77,35 @@ def create_html(series_data):
     <style>
         :root {{ --primary: #e50914; --bg: #141414; --card-bg: #1f1f1f; --text: #ffffff; }}
         body {{ background-color: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }}
-        .header {{ padding: 20px 4%; background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); display: flex; justify-content: space-between; align-items: center; }}
-        .logo {{ font-size: 30px; font-weight: bold; color: var(--primary); }}
-        .search-box {{ position: relative; width: 300px; }}
-        .search-box input {{ width: 100%; padding: 10px 40px; border-radius: 20px; border: 1px solid #333; background: #000; color: #fff; }}
-        .search-box i {{ position: absolute; left: 15px; top: 12px; color: #888; }}
+        .header {{ padding: 20px 4%; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); display: flex; justify-content: space-between; align-items: center; }}
+        .logo {{ font-size: 28px; font-weight: bold; color: var(--primary); text-decoration: none; }}
+        .search-box {{ position: relative; width: 250px; }}
+        .search-box input {{ width: 100%; padding: 10px 15px 10px 35px; border-radius: 20px; border: 1px solid #333; background: #000; color: #fff; }}
+        .search-box i {{ position: absolute; left: 12px; top: 12px; color: #888; }}
         .container {{ padding: 20px 4%; }}
-        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }}
-        .card {{ background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }}
-        .card:hover {{ transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 25px; }}
+        .card {{ background: var(--card-bg); border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; border: 1px solid #222; }}
+        .card:hover {{ transform: translateY(-5px); box-shadow: 0 10px 20px rgba(229,9,20,0.2); border-color: var(--primary); }}
         .card img {{ width: 100%; aspect-ratio: 2/3; object-fit: cover; }}
-        .card-info {{ padding: 10px; font-size: 14px; font-weight: 500; text-align: center; }}
-        .back-btn {{ background: var(--primary); color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 20px; display: none; }}
-        .player-overlay {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; justify-content: center; align-items: center; }}
-        .close-player {{ position: absolute; top: 20px; right: 20px; font-size: 30px; cursor: pointer; }}
-        iframe {{ width: 80%; height: 80%; border: none; }}
+        .card-info {{ padding: 12px; font-size: 14px; font-weight: bold; text-align: center; color: #eee; }}
+        .back-btn {{ background: var(--primary); color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 20px; display: none; font-weight: bold; }}
+        h2 {{ border-left: 4px solid var(--primary); padding-left: 15px; margin-bottom: 25px; }}
+        @media (max-width: 600px) {{ .grid {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }} .search-box {{ width: 150px; }} }}
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="logo">NOW TV</div>
+        <a href="#" onclick="location.reload()" class="logo">NOW TV ARŞİV</a>
         <div class="search-box">
             <i class="fa fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Dizi ara..." onkeyup="search()">
+            <input type="text" id="searchInput" placeholder="Dizi/Bölüm ara..." onkeyup="search()">
         </div>
     </div>
 
     <div class="container">
-        <button id="backBtn" class="back-btn" onclick="showSeries()"><i class="fa fa-arrow-left"></i> Geri Dön</button>
+        <button id="backBtn" class="back-btn" onclick="showSeries()"><i class="fa fa-arrow-left"></i> GERİ DÖN</button>
         <h2 id="viewTitle">Tüm Diziler</h2>
         <div id="mainGrid" class="grid"></div>
-    </div>
-
-    <div id="playerOverlay" class="player-overlay">
-        <span class="close-player" onclick="closePlayer()">&times;</span>
-        <div style="color: white; text-align: center;">
-            <p>Video açılıyor, lütfen bekleyin...</p>
-            <p><small>Eğer video açılmazsa tarayıcı kısıtlaması olabilir.</small></p>
-        </div>
     </div>
 
     <script>
@@ -215,7 +125,7 @@ def create_html(series_data):
                     card.className = 'card';
                     card.onclick = () => showEpisodes(id);
                     card.innerHTML = `
-                        <img src="${{data[id].resim}}" onerror="this.src='https://via.placeholder.com/200x300?text=Resim+Yok'">
+                        <img src="${{data[id].resim}}" onerror="this.src='https://via.placeholder.com/300x450?text=Görsel+Bulunamadı'">
                         <div class="card-info">${{data[id].isim}}</div>
                     `;
                     mainGrid.appendChild(card);
@@ -225,15 +135,16 @@ def create_html(series_data):
 
         function showEpisodes(id) {{
             mainGrid.innerHTML = "";
-            viewTitle.innerText = data[id].isim + " - Bölümler";
+            viewTitle.innerText = data[id].isim;
             backBtn.style.display = "block";
+            window.scrollTo(0,0);
             
             data[id].bolumler.forEach(ep => {{
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.onclick = () => window.open(ep.link, '_blank');
                 card.innerHTML = `
-                    <img src="${{ep.thumbnail || data[id].resim}}" onerror="this.src='https://via.placeholder.com/200x150?text=Bolum'">
+                    <img src="${{ep.thumbnail || data[id].resim}}" onerror="this.src='https://via.placeholder.com/300x200?text=Bölüm+Görseli'">
                     <div class="card-info">${{ep.ad}}</div>
                 `;
                 mainGrid.appendChild(card);
@@ -245,10 +156,6 @@ def create_html(series_data):
             showSeries(val);
         }}
 
-        function closePlayer() {{
-            document.getElementById('playerOverlay').style.display = 'none';
-        }}
-
         window.onload = () => showSeries();
     </script>
 </body>
@@ -256,7 +163,46 @@ def create_html(series_data):
 '''
     with open("nowtv_vod.html", "w", encoding="utf-8") as f:
         f.write(html_content)
-    logger.info("📂 HTML dosyası oluşturuldu.")
+
+def run_scraper():
+    logger.info("🚀 Scraper Başlatıldı...")
+    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+    
+    try:
+        response = scraper.get(MAIN_URL, timeout=30)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        series_data = {}
+        cards = soup.select('.list-item, .program-card')
+
+        for card in cards:
+            link_elem = card.find('a', href=True)
+            if not link_elem: continue
+            
+            s_url = clean_url(link_elem['href'])
+            s_name = (card.select_one('.program-name, .title, h2, h3') or link_elem).get_text(strip=True)
+            s_id = slugify(s_name)
+            
+            if s_id in series_data or not s_name: continue
+
+            img_elem = card.find('img')
+            img = clean_url(img_elem.get('src') or img_elem.get('data-src', '')) if img_elem else ""
+            
+            logger.info(f"🔍 Çekiliyor: {s_name}")
+            eps = extract_series_info(scraper, s_url)
+            
+            if eps:
+                series_data[s_id] = {"isim": s_name, "resim": img, "link": s_url, "bolumler": eps}
+            
+            time.sleep(1)
+
+        with open("nowtv_data.json", "w", encoding="utf-8") as f:
+            json.dump(series_data, f, ensure_ascii=False, indent=2)
+            
+        create_html(series_data)
+        logger.info("🎉 İşlem başarıyla bitti, dosyalar hazır.")
+
+    except Exception as e:
+        logger.error(f"Hata: {e}")
 
 if __name__ == "__main__":
     run_scraper()
