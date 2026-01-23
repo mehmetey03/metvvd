@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # NowTV ayarları
 BASE_URL = "https://www.nowtv.com.tr"
-MAIN_URL = "https://www.nowtv.com.tr/dizi-izle"
+MAIN_URL = "https://www.nowtv.com.tr/dizi-arsivi"
 
 def slugify(text):
     """Türkçe karakterleri dönüştür ve URL uyumlu hale getir"""
