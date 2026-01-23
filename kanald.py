@@ -4,7 +4,7 @@ import json
 import time
 import re
 import os
-import webbrowser
+import subprocess
 
 BASE_URL = "https://www.kanald.com.tr"
 
@@ -20,7 +20,6 @@ def get_series_episodes(scraper, series_url):
     try:
         resp = scraper.get(target_url, timeout=15)
         soup = BeautifulSoup(resp.text, 'html.parser')
-        # Kanal D'nin standart bölüm kartlarını yakala
         cards = soup.select('.story-card, .content-card')
         for card in cards:
             link = card.find('a', href=True) or (card if card.name == 'a' else None)
@@ -30,8 +29,30 @@ def get_series_episodes(scraper, series_url):
                     "ad": title_tag.get_text(strip=True),
                     "link": BASE_URL + link['href'] if link['href'].startswith('/') else link['href']
                 })
-        return episodes[:30] # Sayfa başına max 30 bölüm
+        return episodes[:30]
     except: return []
+
+def commit_and_push(file_name):
+    """GitHub Actions ortamında dosyayı repoya push eder."""
+    print("\n📤 GitHub Reposuna yükleniyor...")
+    try:
+        # Git yapılandırması
+        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+        
+        # Dosyayı ekle ve commit et
+        subprocess.run(["git", "add", file_name], check=True)
+        
+        # Değişiklik olup olmadığını kontrol et
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
+        if status:
+            subprocess.run(["git", "commit", "-m", "🔄 Kanal D Arşivi Güncellendi"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print("🚀 Başarıyla push edildi!")
+        else:
+            print("ℹ️ Değişiklik yok, push atlandı.")
+    except Exception as e:
+        print(f"❌ Git Hatası: {e}")
 
 def run_scraper():
     print("🚀 Kanal D Arşiv Oluşturucu Başlatıldı...")
@@ -63,8 +84,6 @@ def run_scraper():
 
         # HTML OLUŞTURMA
         file_name = "kanald_archive.html"
-        full_path = os.path.abspath(file_name)
-        
         html_template = f"""
         <!DOCTYPE html>
         <html lang="tr">
@@ -95,7 +114,6 @@ def run_scraper():
             <script>
                 const data = {json.dumps(series_data, ensure_ascii=False)};
                 const grid = document.getElementById('main-grid');
-                
                 Object.keys(data).forEach(key => {{
                     const d = data[key];
                     const el = document.createElement('div');
@@ -121,17 +139,14 @@ def run_scraper():
         with open(file_name, "w", encoding="utf-8") as f:
             f.write(html_template)
         
-        print(f"\n✨ BAŞARILI!")
-        print(f"📂 DOSYA YOLU: {full_path}")
-        
-        # Dosyayı otomatik açmayı dene
-        try:
-            webbrowser.open('file://' + full_path)
-        except:
-            pass
+        print(f"\n✨ Dosya oluşturuldu: {file_name}")
+
+        # GITHUB ACTIONS KONTROLÜ VE PUSH
+        if os.getenv('GITHUB_ACTIONS') == 'true' or os.path.exists('.git'):
+            commit_and_push(file_name)
 
     except Exception as e:
-        print(f"❌ Hata oluştu: {e}")
+        print(f"❌ Hata: {e}")
 
 if __name__ == "__main__":
     run_scraper()
