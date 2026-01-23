@@ -1,14 +1,12 @@
 import cloudscraper
 from bs4 import BeautifulSoup
 import json
-import time
 import re
 import subprocess
 
 # Ayarlar
 BASE_URL = "https://www.nowtv.com.tr"
-# NowTV'nin tüm arşivi yüklemek için kullandığı AJAX servisi
-API_URL = "https://www.nowtv.com.tr/api/v1/programs/archive?page="
+ARCHIVE_URL = "https://www.nowtv.com.tr/dizi-arsivi"
 BRADMAX_PLAYER = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl="
 
 def slugify(text):
@@ -19,7 +17,6 @@ def slugify(text):
 
 def get_now_m3u8(scraper, bolum_url):
     try:
-        time.sleep(0.1) # Hız sınırına takılmamak için minik bekleme
         r = scraper.get(bolum_url, timeout=10)
         m3u8_match = re.search(r'(https?://[^\s"\']+\.m3u8[^\s"\']*)', r.text)
         if m3u8_match:
@@ -28,173 +25,150 @@ def get_now_m3u8(scraper, bolum_url):
     except:
         return bolum_url
 
-def commit_and_push(file_name):
-    print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
-    try:
-        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-        subprocess.run(["git", "add", file_name], check=True)
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
-        if status:
-            subprocess.run(["git", "commit", "-m", "🔄 TÜM ARŞİV GÜNCELLENDİ"], check=True)
-            subprocess.run(["git", "push"], check=True)
-            print("🚀 Başarıyla yüklendi!")
-        else:
-            print("✨ Değişiklik yok.")
-    except Exception as e:
-        print(f"❌ Git Hatası: {e}")
-
 def run_scraper():
-    print("🚀 NOW TV Tam Arşiv Scraper Başlatıldı...")
+    print("🚀 NOW TV Scraper Zorlanıyor...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     series_data = {}
     
-    # Sayfa sayfa tüm arşivi tara (Daha fazla butonunu simüle eder)
-    for page in range(1, 10): # İlk 10 sayfayı tara (tüm arşivi kapsar)
-        print(f"📂 Arşiv Sayfası {page} taranıyor...")
-        try:
-            resp = scraper.get(f"{API_URL}{page}", timeout=15)
-            # Eğer API JSON dönüyorsa işle, dönmüyorsa (HTML ise) BS4 ile işle
-            if "application/json" in resp.headers.get('Content-Type', ''):
-                data = resp.json()
-                html_content = data.get('html', '')
-            else:
-                html_content = resp.text
+    try:
+        # 1. Sayfayı Çek
+        resp = scraper.get(ARCHIVE_URL, timeout=20)
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        
+        # Seçiciyi genişletiyoruz: Senin paylaştığın yapıdaki tüm kartları bul
+        cards = soup.find_all('div', class_='list-item')
+        print(f"🔎 Sitede {len(cards)} adet potansiyel dizi kartı bulundu.")
 
-            soup = BeautifulSoup(html_content, 'html.parser')
-            cards = soup.select('.list-item')
+        for card in cards:
+            link_tag = card.find('a', href=True)
+            # Başlık bulma (Strong veya program-name içinden)
+            title_tag = card.find('strong') or card.find(class_='program-name')
             
-            if not cards: break # Artık kart gelmiyorsa döngüden çık
+            if not link_tag or not title_tag:
+                continue
+            
+            title = title_tag.get_text(strip=True)
+            href = link_tag['href']
+            
+            # Linki temizle ve bölümler sayfasına yönlendir
+            bolumler_url = (BASE_URL + href if href.startswith('/') else href).replace('/izle', '/bolumler')
+            dizi_id = slugify(title)
 
-            for card in cards:
-                link_tag = card.find('a', href=True)
-                if not link_tag: continue
+            print(f"🎬 {title} için bölümler taranıyor...")
+            
+            try:
+                b_resp = scraper.get(bolumler_url, timeout=15)
+                b_soup = BeautifulSoup(b_resp.text, 'html.parser')
+                # Bölüm linklerini topla
+                b_links = b_soup.find_all('a', href=re.compile(r'/bolum/'))
                 
-                title = card.select_one('.program-name').get_text(strip=True)
-                if title in [s['isim'] for s in series_data.values()]: continue # Tekrarı önle
-                
-                dizi_id = slugify(title)
-                href = link_tag['href']
-                bolumler_url = (BASE_URL + href if href.startswith('/') else href).split('/izle')[0].rstrip('/') + "/bolumler"
-
-                print(f"  📺 {title} çekiliyor...")
-                
-                try:
-                    b_resp = scraper.get(bolumler_url, timeout=15)
-                    b_soup = BeautifulSoup(b_resp.text, 'html.parser')
-                    # Tüm bölümleri (sayfadaki tüm list-item'ları) al
-                    b_cards = b_soup.find_all('div', class_=re.compile(r'list-item|video-card'))
+                eps = []
+                for b_link in b_links:
+                    full_b_url = BASE_URL + b_link['href'] if b_link['href'].startswith('/') else b_link['href']
                     
-                    eps = []
-                    for bc in b_cards:
-                        b_link = bc.find('a', href=True)
-                        if b_link and "/bolum/" in b_link['href']:
-                            full_b_url = BASE_URL + b_link['href'] if b_link['href'].startswith('/') else b_link['href']
-                            b_name_tag = bc.select_one('.program-name, .title, .video-title')
-                            b_title = b_name_tag.get_text(strip=True) if b_name_tag else "Bölüm"
-                            
-                            m3u8 = get_now_m3u8(scraper, full_b_url)
-                            eps.append({"ad": b_title, "link": m3u8})
+                    # Bölüm adını bulmaya çalış
+                    b_name = b_link.find_next(class_='program-name') or b_link.find_next('strong')
+                    b_title = b_name.get_text(strip=True) if b_name else "Bölüm"
+                    
+                    # m3u8 çek (Daha hızlı olması için şimdilik sadece linki alıyoruz, 
+                    # gerekirse get_now_m3u8 fonksiyonunu burada çağırabilirsin)
+                    m3u8 = get_now_m3u8(scraper, full_b_url)
+                    
+                    if not any(e['link'] == m3u8 for e in eps):
+                        eps.append({"ad": b_title, "link": m3u8})
 
-                    if eps:
-                        img = card.find('img')
-                        poster = img.get('data-src') or img.get('src', '')
-                        if not poster.startswith('http'): poster = BASE_URL + poster
-                        
-                        series_data[dizi_id] = {
-                            "isim": title,
-                            "resim": poster,
-                            "bolumler": eps
-                        }
-                        print(f"    ✅ {len(eps)} bölüm eklendi.")
-                except: continue
-        except Exception as e:
-            print(f"⚠️ Sayfa {page} hatası: {e}")
-            break
+                if eps:
+                    # Resim bulma
+                    img = card.find('img')
+                    poster = img.get('src') or img.get('data-src', '')
+                    if poster and not poster.startswith('http'): poster = BASE_URL + poster
+                    
+                    series_data[dizi_id] = {
+                        "isim": title,
+                        "resim": poster,
+                        "bolumler": eps
+                    }
+                    print(f"   ✅ {len(eps)} bölüm eklendi.")
+            except Exception as e:
+                print(f"   ⚠️ {title} bölümleri çekilemedi: {e}")
+                
+    except Exception as e:
+        print(f"❌ Ana sayfa hatası: {e}")
 
-    create_html(series_data)
+    # Eğer veri varsa HTML oluştur, yoksa hata bas
+    if series_data:
+        create_html(series_data)
+    else:
+        print("🚨 HATA: Hiçbir dizi verisi toplanamadı! HTML güncellenmiyor.")
 
 def create_html(series_data):
-    # (Önceki HTML şablonun aynısı, sadece JavaScript içindeki 'data' güncelleniyor)
     file_name = "nowtv_vod.html"
     json_embedded = json.dumps(series_data, ensure_ascii=False)
     
-    html = f'''<!DOCTYPE html>
+    html_content = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>NOW TV ARŞİV</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOW VOD</title>
     <style>
-        body {{ margin: 0; background: #050505; color: #eee; font-family: sans-serif; }}
-        .nav {{ background: #111; padding: 15px; border-bottom: 3px solid #f50057; display: flex; justify-content: space-between; position: sticky; top: 0; z-index: 100; }}
-        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 15px; }}
-        .card {{ background: #181818; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid #222; }}
-        .card:hover {{ border-color: #f50057; }}
-        .card img {{ width: 100%; aspect-ratio: 2/3; object-fit: cover; }}
-        .card-txt {{ padding: 8px; font-size: 11px; text-align: center; }}
-        .hidden {{ display: none !important; }}
-        .player {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 200; display: none; }}
-        .btn {{ background: #f50057; color: #fff; border: none; padding: 10px; cursor: pointer; margin: 5px; border-radius: 4px; }}
+        body {{ background:#000; color:#fff; font-family:sans-serif; margin:0; }}
+        .grid {{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; padding:20px; }}
+        .card {{ background:#111; border:1px solid #333; padding:10px; cursor:pointer; text-align:center; }}
+        .card img {{ width:100%; height:200px; object-fit:cover; }}
+        .player {{ position:fixed; top:0; left:0; width:100%; height:100%; background:#000; display:none; z-index:99; }}
+        .close {{ position:absolute; top:10px; right:10px; background:red; color:white; border:none; padding:10px; cursor:pointer; }}
     </style>
 </head>
 <body>
-    <div class="nav">
-        <b>NOW TV VOD</b>
-        <input type="text" id="search" placeholder="Dizi ara..." oninput="doSearch()" style="padding:5px; border-radius:4px; border:none;">
-    </div>
     <div id="m-grid" class="grid"></div>
-    <div id="e-grid" class="grid hidden"></div>
     <div id="p-view" class="player">
-        <button class="btn" onclick="closeP()">✕ KAPAT</button>
-        <div id="v-frame" style="height: calc(100% - 60px);"></div>
+        <button class="close" onclick="closeP()">KAPAT</button>
+        <div id="v-frame" style="width:100%; height:100%;"></div>
     </div>
     <script>
         const data = {json_embedded};
-        const PLAYER = "{BRADMAX_PLAYER}";
-        function init() {{
-            const m = document.getElementById("m-grid");
-            Object.keys(data).forEach(id => {{
-                const c = document.createElement("div");
-                c.className = "card";
-                c.innerHTML = `<img src="${{data[id].resim}}"><div class="card-txt">${{data[id].isim}}</div>`;
-                c.onclick = () => showE(id);
-                m.appendChild(c);
-            }});
-        }}
-        function showE(id) {{
-            window.scrollTo(0,0);
-            document.getElementById("m-grid").classList.add("hidden");
-            const eg = document.getElementById("e-grid");
-            eg.classList.remove("hidden");
-            eg.innerHTML = `<div style="grid-column: 1/-1"><button class="btn" onclick="back()">← GERİ</button><h2>${{data[id].isim}}</h2></div>`;
+        const m = document.getElementById("m-grid");
+        Object.keys(data).forEach(id => {{
+            const c = document.createElement("div");
+            c.className = "card";
+            c.innerHTML = `<img src="${{data[id].resim}}"><div>${{data[id].isim}}</div>`;
+            c.onclick = () => showEpisodes(id);
+            m.appendChild(c);
+        }});
+
+        function showEpisodes(id) {{
+            m.innerHTML = `<button onclick="location.reload()" style="padding:10px; margin:10px;">GERİ DÖN</button><h2>${{data[id].isim}}</h2>`;
             data[id].bolumler.forEach(ep => {{
-                const c = document.createElement("div");
-                c.className = "card";
-                c.innerHTML = `<img src="${{data[id].resim}}"><div class="card-txt">${{ep.ad}}</div>`;
-                c.onclick = () => play(ep.link);
-                eg.appendChild(c);
+                const d = document.createElement("div");
+                d.className = "card";
+                d.innerHTML = `<div>${{ep.ad}}</div>`;
+                d.onclick = () => play(ep.link);
+                m.appendChild(d);
             }});
         }}
-        function play(l) {{
+
+        function play(link) {{
             document.getElementById("p-view").style.display = "block";
-            let u = l.includes(".m3u8") ? PLAYER + encodeURIComponent(l) : l;
-            document.getElementById("v-frame").innerHTML = `<iframe src="${{u}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+            let embed = link.includes(".m3u8") ? "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=" + encodeURIComponent(link) : link;
+            document.getElementById("v-frame").innerHTML = `<iframe src="${{embed}}" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
         }}
-        function back() {{ document.getElementById("e-grid").classList.add("hidden"); document.getElementById("m-grid").classList.remove("hidden"); }}
-        function closeP() {{ document.getElementById("p-view").style.display = "none"; document.getElementById("v-frame").innerHTML = ""; }}
-        function doSearch() {{
-            let q = document.getElementById("search").value.toLowerCase();
-            document.querySelectorAll("#m-grid .card").forEach(c => c.style.display = c.innerText.toLowerCase().includes(q) ? "" : "none");
-        }}
-        init();
+
+        function closeP() {{ document.getElementById("p-view").style.display="none"; document.getElementById("v-frame").innerHTML=""; }}
     </script>
 </body>
 </html>'''
 
     with open(file_name, "w", encoding="utf-8") as f:
-        f.write(html)
-    commit_and_push(file_name)
+        f.write(html_content)
+    
+    # Git işlemleri
+    try:
+        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+        subprocess.run(["git", "add", file_name], check=True)
+        subprocess.run(["git", "commit", "-m", "🔄 VOD İçerik Güncellendi"], check=True)
+        subprocess.run(["git", "push"], check=True)
+    except: pass
 
 if __name__ == "__main__":
     run_scraper()
