@@ -1,194 +1,143 @@
-import cloudscraper
+import requests
 from bs4 import BeautifulSoup
 import json
 import time
 import re
 
-# Kanal D kök adresi
-BASE_URL = "https://www.kanald.com.tr"
+class KanalDScraper:
+    def __init__(self):
+        self.base_url = "https://www.kanald.com.tr"
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
 
-# Bot korumasını aşmak için scraper
-scraper = cloudscraper.create_scraper(
-    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-)
+    def safe_slug(self, text):
+        """Hata veren maketrans yerine güvenli karakter dönüşümü"""
+        if not text: return ""
+        mapping = {
+            'ç': 'c', 'ğ': 'g', 'ı': 'i', 'i': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u',
+            'Ç': 'C', 'Ğ': 'G', 'İ': 'I', 'I': 'i', 'Ö': 'O', 'Ş': 'S', 'Ü': 'U'
+        }
+        for tr, en in mapping.items():
+            text = text.replace(tr, en)
+        text = re.sub(r'[^a-zA-Z0-9\s-]', '', text)
+        return text.strip().lower().replace(" ", "-")
 
-def get_soup(url):
-    try:
-        response = scraper.get(url, timeout=20)
-        return BeautifulSoup(response.text, "html.parser")
-    except Exception as e:
-        print(f"  ❌ Hata (Bağlantı): {e}")
-        return None
-
-def slugify(text):
-    tr_map = str.maketrans("ığüşöçİĞÜŞÖÇ", "igusoicigusoic")
-    text = text.translate(tr_map).lower()
-    text = re.sub(r'[^a-z0-9]', '', text)
-    return text
-
-def main():
-    print("🚀 Kanal D Profesyonel Arşiv Tarayıcı Başlatıldı...")
-    
-    # Diziler ve Programlar sayfalarını tara
-    targets = ["/diziler", "/programlar"]
-    diziler_data = {}
-
-    for target in targets:
-        print(f"\n📍 {target[1:].upper()} listesi çekiliyor...")
-        soup = get_soup(BASE_URL + target)
-        if not soup: continue
-
-        cards = soup.find_all("a", class_="poster-card")
-        print(f"🔎 {len(cards)} içerik bulundu. Detaylar ve bölümler taranıyor...")
-
+    def get_content_list(self, category_path):
+        """Dizi veya Program listesini çeker"""
+        url = f"{self.base_url}{category_path}"
+        response = requests.get(url, headers=self.headers)
+        soup = BeautifulSoup(response.content, "html.parser")
+        
+        items = []
+        # Kanal D'nin kart yapısına göre seçici
+        cards = soup.select(".content-card, .story-card, .series-card")
+        
         for card in cards:
-            try:
-                img_tag = card.find("img")
-                dizi_adi = img_tag.get("alt", "").strip() if img_tag else ""
-                if not dizi_adi: continue
+            link_tag = card.find("a") if card.name != "a" else card
+            if link_tag and link_tag.get("href"):
+                title = card.find("h3") or card.find("h2") or card.find(class_="title")
+                items.append({
+                    "title": title.text.strip() if title else "Adsız İçerik",
+                    "url": self.base_url + link_tag.get("href") if not link_tag.get("href").startswith("http") else link_tag.get("href")
+                })
+        return items
+
+    def get_episodes(self, content_url):
+        """İçeriğin bölümlerini ve sezonlarını tarar"""
+        try:
+            # Bölümler sayfasına git
+            if not content_url.endswith("/bolumler"):
+                content_url = content_url.rstrip('/') + "/bolumler"
+            
+            response = requests.get(content_url, headers=self.headers)
+            soup = BeautifulSoup(response.content, "html.parser")
+            
+            episodes = []
+            # Paylaştığın HTML yapısındaki swiper-slide içindeki bölümleri bulur
+            items = soup.select(".swiper-slide .story-card")
+            
+            for item in items:
+                title_tag = item.select_one(".title")
+                time_tag = item.select_one("time")
+                img_tag = item.select_one("img")
                 
-                dizi_id = slugify(dizi_adi)
-                dizi_href = card.get("href", "")
-                dizi_link = BASE_URL + dizi_href if dizi_href.startswith("/") else dizi_href
-                poster_url = img_tag.get("data-src") or img_tag.get("src") or ""
-                if poster_url.startswith("//"): poster_url = "https:" + poster_url
+                episodes.append({
+                    "title": title_tag.text.strip() if title_tag else "Bölüm",
+                    "duration": time_tag.text.strip() if time_tag else "N/A",
+                    "image": img_tag.get("data-src") or img_tag.get("src") if img_tag else "",
+                    "link": self.base_url + item.get("href") if item.get("href") else "#"
+                })
+            return episodes
+        except Exception as e:
+            print(f"  ⚠️ Hata: {str(e)}")
+            return []
 
-                print(f"  --> {dizi_adi} işleniyor...")
+    def run(self):
+        print("🚀 Kanal D Profesyonel Arşiv Tarayıcı Başlatıldı...")
+        results = {"diziler": [], "programlar": []}
 
-                # BÖLÜMLERİ ÇEKME
-                bolumler = []
-                # Kanal D'de bölümler genellikle /bolumler sayfasındadır
-                bolum_sayfasi_url = dizi_link + "/bolumler"
-                bolum_soup = get_soup(bolum_sayfasi_url)
+        categories = [("/diziler", "diziler"), ("/programlar", "programlar")]
 
-                if bolum_soup:
-                    # Bölüm kartlarını bul (genellikle poster-card veya benzeri)
-                    bolum_cards = bolum_soup.find_all("a", class_="poster-card")
-                    for b_card in bolum_cards:
-                        b_title = b_card.find("span", class_="title")
-                        b_adi = b_title.get_text(strip=True) if b_title else "Bölüm"
-                        b_href = b_card.get("href", "")
-                        
-                        # Video sayfasının linki
-                        b_video_url = BASE_URL + b_href if b_href.startswith("/") else b_href
-                        
-                        # KANAL D ÖZEL: Video kaynağını çekme (Genellikle iframe veya data-src içinde)
-                        # Not: Kanal D'de m3u8 çekmek için video sayfasına girmek gerekir.
-                        # Hız için şimdilik sayfa linkini bırakıyoruz, 
-                        # Arzu edersen her bölümün içine giren derin taramayı da ekleyebiliriz.
-                        bolumler.append({
-                            "ad": b_adi,
-                            "link": b_video_url 
-                        })
+        for path, key in categories:
+            print(f"\n📍 {key.upper()} listesi çekiliyor...")
+            items = self.get_content_list(path)
+            print(f"🔎 {len(items)} içerik bulundu. Detaylar taranıyor...")
 
-                # Eğer hiç bölüm bulunamadıysa ana sayfayı ekle
-                if not bolumler:
-                    bolumler.append({"ad": "Tüm Bölümler", "link": dizi_link})
+            for item in items:
+                print(f"  🔄 İşleniyor: {item['title']}")
+                item['episodes'] = self.get_episodes(item['url'])
+                results[key].append(item)
+                time.sleep(0.5) # Sunucuyu yormamak için
 
-                diziler_data[dizi_id] = {
-                    "ad": dizi_adi,
-                    "resim": poster_url,
-                    "bolumler": bolumler
-                }
-                
-                time.sleep(0.2) # Sunucuyu yormayalım
+        self.save_to_html(results)
 
-            except Exception as e:
-                print(f"  ⚠️ {dizi_adi} işlenirken hata: {e}")
+    def save_to_html(self, data):
+        """Sonuçları şık bir HTML dosyasına kaydeder"""
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <title>Kanal D Arşiv Listesi</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <style>
+                body {{ background: #f4f4f4; }}
+                .content-section {{ margin-bottom: 50px; background: white; padding: 20px; border-radius: 10px; }}
+                .episode-card {{ font-size: 0.8rem; border: 1px solid #ddd; margin-bottom: 10px; }}
+                .img-fluid {{ border-radius: 5px; }}
+            </style>
+        </head>
+        <body class="container py-5">
+            <h1 class="text-center mb-5">Kanal D İçerik Arşivi</h1>
+            
+            {"".join([self.generate_section(k.upper(), v) for k, v in data.items()])}
+            
+        </body>
+        </html>
+        """
+        with open("kanald_pro.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print("\n✨ İşlem Başarılı! 'kanald_pro.html' oluşturuldu.")
 
-    create_html_file(diziler_data)
-
-def create_html_file(data):
-    json_str = json.dumps(data, ensure_ascii=False)
-    
-    # Paylaştığın Show TV Stilindeki Template
-    html_template = f'''<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <title>KANAL D ME TV VOD</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css?family=PT+Sans:700i" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://kit.fontawesome.com/bbe955c5ed.js" crossorigin="anonymous"></script>
-    <style>
-        /* Senin paylaştığın CSS kodlarının aynısı */
-        body {{ margin: 0; padding: 0; background: #00040d; font-family: sans-serif; color: white; }}
-        .aramapanel {{ width: 100%; height: 60px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }}
-        .filmpaneldis {{ padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }}
-        .filmpanel {{ background: #15161a; border: 1px solid #323442; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }}
-        .filmpanel:hover {{ border-color: #572aa7; transform: translateY(-5px); }}
-        .filmresim img {{ width: 100%; aspect-ratio: 2/3; object-fit: cover; }}
-        .filmisimpanel {{ padding: 10px; background: linear-gradient(transparent, black); position: absolute; bottom: 0; width: 100%; }}
-        .filmisim {{ font-size: 14px; text-align: center; font-weight: bold; }}
-        .hidden {{ display: none; }}
-        .bolum-container {{ padding: 20px; }}
-        .geri-btn {{ background: #572aa7; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; display: inline-block; margin-bottom: 20px; }}
-    </style>
-</head>
-<body>
-    <div class="aramapanel">
-        <div style="display:flex; align-items:center;">
-            <div style="width:40px; margin-right:10px;"><img src="https://i.hizliresim.com/t6e66bt.png" width="100%"></div>
-            <div style="font-size:20px; font-weight:bold;">KANAL D VOD</div>
-        </div>
-    </div>
-
-    <div class="filmpaneldis" id="diziListesiContainer"></div>
-
-    <div id="bolumler" class="bolum-container hidden">
-        <div class="geri-btn" onclick="geriDon()">← Geri Dön</div>
-        <div id="bolumListesi" class="filmpaneldis"></div>
-    </div>
-
-    <script>
-        var diziler = {json_str};
-
-        function renderDiziler() {{
-            const container = document.getElementById("diziListesiContainer");
-            Object.keys(diziler).forEach(key => {{
-                const dizi = diziler[key];
-                const div = document.createElement("div");
-                div.className = "filmpanel";
-                div.onclick = () => showBolumler(key);
-                div.innerHTML = `
-                    <div class="filmresim"><img src="${{dizi.resim}}"></div>
-                    <div class="filmisimpanel"><div class="filmisim">${{dizi.ad}}</div></div>
-                `;
-                container.appendChild(div);
-            }});
-        }}
-
-        function showBolumler(id) {{
-            const list = document.getElementById("bolumListesi");
-            list.innerHTML = "";
-            diziler[id].bolumler.forEach(b => {{
-                const div = document.createElement("div");
-                div.className = "filmpanel";
-                div.onclick = () => window.open(b.link, "_blank");
-                div.innerHTML = `
-                    <div class="filmresim"><img src="${{diziler[id].resim}}"></div>
-                    <div class="filmisimpanel"><div class="filmisim">${{b.ad}}</div></div>
-                `;
-                list.appendChild(div);
-            }});
-            document.getElementById("diziListesiContainer").classList.add("hidden");
-            document.getElementById("bolumler").classList.remove("hidden");
-        }}
-
-        function geriDon() {{
-            document.getElementById("diziListesiContainer").classList.remove("hidden");
-            document.getElementById("bolumler").classList.add("hidden");
-        }}
-
-        renderDiziler();
-    </script>
-</body>
-</html>'''
-    
-    with open("kanald_pro.html", "w", encoding="utf-8") as f:
-        f.write(html_template)
-    print("\n✨ İşlem Başarılı! 'kanald_pro.html' oluşturuldu.")
+    def generate_section(self, title, items):
+        section_html = f"<div class='content-section'><h2>{title}</h2><div class='row'>"
+        for item in items:
+            episodes_html = "".join([f"<li>{ep['title']} ({ep['duration']})</li>" for ep in item['episodes'][:5]])
+            section_html += f"""
+            <div class='col-md-4 mb-4'>
+                <div class='card h-100'>
+                    <div class='card-body'>
+                        <h5 class='card-title'>{item['title']}</h5>
+                        <p class='text-muted'>Son Bölümler:</p>
+                        <ul>{episodes_html}</ul>
+                        <a href='{item['url']}' class='btn btn-sm btn-primary' target='_blank'>Sayfaya Git</a>
+                    </div>
+                </div>
+            </div>"""
+        section_html += "</div></div>"
+        return section_html
 
 if __name__ == "__main__":
-    main()
+    scraper = KanalDScraper()
+    scraper.run()
