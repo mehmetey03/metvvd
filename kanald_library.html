@@ -1,0 +1,44 @@
+
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Kanal D Arşivi</title>
+        <style>
+            body { background: #0b0f19; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+            h1 { text-align: center; color: #3a86ff; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 2px; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+            .card { background: #161d2f; border-radius: 12px; overflow: hidden; border: 1px solid #232d45; transition: 0.3s; text-decoration: none; color: inherit; }
+            .card:hover { transform: translateY(-5px); border-color: #3a86ff; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+            .img-container { position: relative; width: 100%; padding-top: 140%; }
+            .img-container img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+            .info { padding: 15px; text-align: center; }
+            .info h3 { margin: 0; font-size: 16px; height: 40px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        </style>
+    </head>
+    <body>
+        <h1>📺 Kanal D Arşivi (38 İçerik)</h1>
+        <div class="grid" id="main-grid"></div>
+        <script>
+            const data = [{"name": "Güller ve Günahlar", "url": "https://www.kanald.com.tr/guller-ve-gunahlar", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68c85dfff35cf5ba33dfcd69.jpg"}, {"name": "Eşref Rüya", "url": "https://www.kanald.com.tr/esref-ruya", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/691439de9974e8ffe8aafce2.jpg"}, {"name": "Uzak Şehir", "url": "https://www.kanald.com.tr/uzak-sehir", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68b94064846cac640f87db45.jpg"}, {"name": "İnci Taneleri", "url": "https://www.kanald.com.tr/inci-taneleri", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682cb28f2d741ef4ddb256bb.jpg"}, {"name": "Arka Sokaklar", "url": "https://www.kanald.com.tr/arka-sokaklar", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68c19349410eac5508f55040.jpg"}, {"name": "Hayat Şarkısı", "url": "https://www.kanald.com.tr/hayat-sarkisi", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34962d741ef4ddb25854.jpg"}, {"name": "Vatanım Sensin", "url": "https://www.kanald.com.tr/vatanim-sensin", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34a22d741ef4ddb25857.jpg"}, {"name": "Siyah Beyaz Aşk", "url": "https://www.kanald.com.tr/siyah-beyaz-ask", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34b42d741ef4ddb2585b.jpg"}, {"name": "Zalim İstanbul", "url": "https://www.kanald.com.tr/zalim-istanbul", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34bd2d741ef4ddb2585d.jpg"}, {"name": "Poyraz Karayel", "url": "https://www.kanald.com.tr/poyraz-karayel", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34c82d741ef4ddb2585f.jpg"}, {"name": "Afili Aşk", "url": "https://www.kanald.com.tr/afili-ask", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34d22d741ef4ddb25862.jpg"}, {"name": "Güneşin Kızları", "url": "https://www.kanald.com.tr/gunesin-kizlari", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34dc2d741ef4ddb25864.jpg"}, {"name": "Fatmagül'ün Suçu Ne?", "url": "https://www.kanald.com.tr/fatmagulunsucune", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34e52d741ef4ddb25867.jpg"}, {"name": "Hekimoğlu", "url": "https://www.kanald.com.tr/hekimoglu", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34ee2d741ef4ddb25869.jpg"}, {"name": "Kuzey Güney", "url": "https://www.kanald.com.tr/kuzeyguney", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/682f34f92d741ef4ddb2586b.jpg"}, {"name": "Beyaz'la Joker", "url": "https://www.kanald.com.tr/beyazla-joker", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/69679f1d4514ff3cabc3f24a.jpg"}, {"name": "Gelinim Mutfakta", "url": "https://www.kanald.com.tr/gelinim-mutfakta", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/66b08a5af03f5c8f215f0f79.jpg"}, {"name": "Neler Oluyor Hayatta?", "url": "https://www.kanald.com.tr/neler-oluyor-hayatta", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68c18fc88b0ee3a869cbf026.jpg"}, {"name": "Arda'nın Mutfağı", "url": "https://www.kanald.com.tr/ardanin-mutfagi", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/61535cfe4453951504a95c64.jpg"}, {"name": "Arda ile Omuz Omuza", "url": "https://www.kanald.com.tr/arda-ile-omuz-omuza", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/61535c5f4453951504a95c4b.jpg"}, {"name": "Kanal D Ana Haber", "url": "https://www.kanald.com.tr/kanal-d-ana-haber", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68cbee71b44f78b90feab939.jpg"}, {"name": "Kanal D Haber Hafta Sonu", "url": "https://www.kanald.com.tr/kanal-d-haber-hafta-sonu", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68cee856fe1eaeeea1ad4e43.jpg"}, {"name": "Magazin D Cumartesi", "url": "https://www.kanald.com.tr/magazin-d-cumartesi", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68722884ff79654e7d12b5b1.jpg"}, {"name": "Magazin D Pazar", "url": "https://www.kanald.com.tr/magazin-d-pazar", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/6872297eff79654e7d12b629.jpg"}, {"name": "Konuştukça", "url": "https://www.kanald.com.tr/konustukca", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/6930449f4c5d448b7df6a57f.jpg"}, {"name": "Pazar Gezmesi", "url": "https://www.kanald.com.tr/pazar-gezmesi", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/6943c72f4c5d448b7df6ba12.jpg"}, {"name": "Kuralsız Sokaklar", "url": "https://www.kanald.com.tr/kuralsiz-sokaklar", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68c914861071aaa596823901.jpg"}, {"name": "Turnike", "url": "https://www.kanald.com.tr/turnike", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68c914a11071aaa596823906.jpg"}, {"name": "Password", "url": "https://www.kanald.com.tr/password", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68c914bb1071aaa596823908.jpg"}, {"name": "Buyur Burdan Bak", "url": "https://www.kanald.com.tr/buyur-burdan-bak", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babffcd62926e00edbcb20.jpg"}, {"name": "Kısmetse Olur", "url": "https://www.kanald.com.tr/kismetse-olur", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babf73d62926e00edbcb14.jpg"}, {"name": "Ece Üner ile Susma", "url": "https://www.kanald.com.tr/ece-uner-ile-susma", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babec8d62926e00edbcb02.jpg"}, {"name": "Çok Güzel Hareketler 2", "url": "https://www.kanald.com.tr/cok-guzel-hareketler-2", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babf16d62926e00edbcb0a.jpg"}, {"name": "Kızma Kazan", "url": "https://www.kanald.com.tr/kizmakazan", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/5465ea35cf45af0ef49cc1a6.jpg"}, {"name": "Ayhan Sicimoğlu ile Renkler", "url": "https://www.kanald.com.tr/ayhan-sicimoglu-ile-renkler", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babf39d62926e00edbcb0e.jpg"}, {"name": "112 Acil", "url": "https://www.kanald.com.tr/112acil", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/5466673a61361f00a01115e2.jpg"}, {"name": "Burada Laf Çok", "url": "https://www.kanald.com.tr/burada-laf-cok", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babf5ed62926e00edbcb12.jpg"}, {"name": "Macera Gemisi", "url": "https://www.kanald.com.tr/macera-gemisi", "resim": "https://image.kanald.com.tr/i/kanald/100/264x365/68babf87d62926e00edbcb16.jpg"}];
+            const grid = document.getElementById('main-grid');
+            data.forEach(item => {
+                const a = document.createElement('a');
+                a.className = 'card';
+                a.href = item.url;
+                a.target = '_blank';
+                a.innerHTML = `
+                    <div class="img-container">
+                        <img src="${item.resim}" loading="lazy">
+                    </div>
+                    <div class="info">
+                        <h3>${item.name}</h3>
+                    </div>
+                `;
+                grid.appendChild(a);
+            });
+        </script>
+    </body>
+    </html>
+    
