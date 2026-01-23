@@ -1,93 +1,87 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <title>NOW TV Arşivi</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root { --primary: #e50914; --bg: #141414; --card-bg: #1f1f1f; --text: #ffffff; }
-        body { background-color: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-        .header { padding: 20px 4%; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 28px; font-weight: bold; color: var(--primary); text-decoration: none; }
-        .search-box { position: relative; width: 250px; }
-        .search-box input { width: 100%; padding: 10px 15px 10px 35px; border-radius: 20px; border: 1px solid #333; background: #000; color: #fff; }
-        .search-box i { position: absolute; left: 12px; top: 12px; color: #888; }
-        .container { padding: 20px 4%; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 25px; }
-        .card { background: var(--card-bg); border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; border: 1px solid #222; }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(229,9,20,0.2); border-color: var(--primary); }
-        .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card-info { padding: 12px; font-size: 14px; font-weight: bold; text-align: center; color: #eee; }
-        .back-btn { background: var(--primary); color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 20px; display: none; font-weight: bold; }
-        h2 { border-left: 4px solid var(--primary); padding-left: 15px; margin-bottom: 25px; }
-        @media (max-width: 600px) { .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .search-box { width: 150px; } }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <a href="#" onclick="location.reload()" class="logo">NOW TV ARŞİV</a>
-        <div class="search-box">
-            <i class="fa fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Dizi/Bölüm ara..." onkeyup="search()">
+
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <title>NOW TV DİZİ ARŞİVİ</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <style>
+            :root { --primary: #e50914; --bg: #141414; --card-bg: #1f1f1f; --text: #ffffff; }
+            body { background-color: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
+            .header { padding: 20px 4%; background: rgba(0,0,0,0.9); position: sticky; top: 0; z-index: 1000; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+            .logo { font-size: 28px; font-weight: bold; color: var(--primary); text-decoration: none; }
+            .search-box input { padding: 10px 20px; border-radius: 20px; border: 1px solid #444; background: #000; color: #fff; width: 250px; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 20px 4%; }
+            .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; border: 1px solid #222; }
+            .card:hover { transform: scale(1.05); border-color: var(--primary); }
+            .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
+            .card-info { padding: 10px; text-align: center; font-weight: bold; font-size: 14px; }
+            .player-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: none; align-items: center; justify-content: center; }
+            .player-container { width: 90%; max-width: 1000px; position: relative; }
+            .close-btn { position: absolute; top: -40px; right: 0; color: #fff; font-size: 30px; cursor: pointer; }
+            iframe { width: 100%; height: 56.25vw; max-height: 600px; border: none; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <a href="#" class="logo">NOW TV ARŞİV</a>
+            <div class="search-box"><input type="text" id="searchInput" placeholder="Dizi ara..." onkeyup="search()"></div>
         </div>
-    </div>
+        <div id="seriesGrid" class="grid"></div>
+        <div id="episodesGrid" class="grid" style="display:none;"></div>
+        <div id="playerOverlay" class="player-overlay">
+            <div class="player-container">
+                <span class="close-btn" onclick="closePlayer()">&times;</span>
+                <iframe id="videoFrame" src="" allowfullscreen></iframe>
+            </div>
+        </div>
+        <script>
+            const data = {};
+            const sGrid = document.getElementById('seriesGrid');
+            const eGrid = document.getElementById('episodesGrid');
 
-    <div class="container">
-        <button id="backBtn" class="back-btn" onclick="showSeries()"><i class="fa fa-arrow-left"></i> GERİ DÖN</button>
-        <h2 id="viewTitle">Tüm Diziler</h2>
-        <div id="mainGrid" class="grid"></div>
-    </div>
-
-    <script>
-        const data = {};
-        const mainGrid = document.getElementById('mainGrid');
-        const viewTitle = document.getElementById('viewTitle');
-        const backBtn = document.getElementById('backBtn');
-
-        function showSeries(filter = "") {
-            mainGrid.innerHTML = "";
-            viewTitle.innerText = "Tüm Diziler";
-            backBtn.style.display = "none";
-            
-            for (let id in data) {
-                if (data[id].isim.toLowerCase().includes(filter.toLowerCase())) {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.onclick = () => showEpisodes(id);
-                    card.innerHTML = `
-                        <img src="${data[id].resim}" onerror="this.src='https://via.placeholder.com/300x450?text=Görsel+Bulunamadı'">
+            function render() {
+                sGrid.innerHTML = "";
+                for(let id in data) {
+                    sGrid.innerHTML += `<div class="card" onclick="showEpisodes('${id}')">
+                        <img src="${data[id].resim}">
                         <div class="card-info">${data[id].isim}</div>
-                    `;
-                    mainGrid.appendChild(card);
+                    </div>`;
                 }
             }
-        }
 
-        function showEpisodes(id) {
-            mainGrid.innerHTML = "";
-            viewTitle.innerText = data[id].isim;
-            backBtn.style.display = "block";
-            window.scrollTo(0,0);
+            function showEpisodes(id) {
+                sGrid.style.display = "none";
+                eGrid.style.display = "grid";
+                eGrid.innerHTML = `<div style="grid-column:1/-1"><button onclick="location.reload()" style="background:red; color:white; border:none; padding:10px; cursor:pointer">GERİ DÖN</button><h2>${data[id].isim}</h2></div>`;
+                data[id].bolumler.forEach(ep => {
+                    eGrid.innerHTML += `<div class="card" onclick="play('${ep.link}')">
+                        <img src="${ep.thumbnail || data[id].resim}">
+                        <div class="card-info">${ep.ad}</div>
+                    </div>`;
+                });
+            }
+
+            function play(url) {
+                document.getElementById('videoFrame').src = url;
+                document.getElementById('playerOverlay').style.display = "flex";
+            }
+
+            function closePlayer() {
+                document.getElementById('playerOverlay').style.display = "none";
+                document.getElementById('videoFrame').src = "";
+            }
             
-            data[id].bolumler.forEach(ep => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.onclick = () => window.open(ep.link, '_blank');
-                card.innerHTML = `
-                    <img src="${ep.thumbnail || data[id].resim}" onerror="this.src='https://via.placeholder.com/300x200?text=Bölüm+Görseli'">
-                    <div class="card-info">${ep.ad}</div>
-                `;
-                mainGrid.appendChild(card);
-            });
-        }
+            function search() {
+                let val = document.getElementById('searchInput').value.toLowerCase();
+                document.querySelectorAll('#seriesGrid .card').forEach(card => {
+                    card.style.display = card.innerText.toLowerCase().includes(val) ? "block" : "none";
+                });
+            }
 
-        function search() {
-            const val = document.getElementById('searchInput').value;
-            showSeries(val);
-        }
-
-        window.onload = () => showSeries();
-    </script>
-</body>
-</html>
+            render();
+        </script>
+    </body>
+    </html>
+    
