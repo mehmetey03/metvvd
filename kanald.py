@@ -8,6 +8,7 @@ import subprocess
 
 # Web sitesi kök adresi
 BASE_URL = "https://www.kanald.com.tr"
+ARCHIVE_URL = "https://www.kanald.com.tr/diziler/arsiv?page="
 
 def slugify(text):
     mapping = {'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u','İ':'i'}
@@ -24,7 +25,7 @@ def commit_and_push(file_name):
         subprocess.run(["git", "add", file_name], check=True)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
         if status:
-            subprocess.run(["git", "commit", "-m", "🔄 Kanal D Arşivi Güncellendi"], check=True)
+            subprocess.run(["git", "commit", "-m", "🔄 Kanal D Tüm Arşiv Güncellendi"], check=True)
             subprocess.run(["git", "push"], check=True)
             print("🚀 GitHub Reponuza başarıyla yüklendi!")
         else:
@@ -38,103 +39,121 @@ def get_series_episodes(scraper, series_url):
     try:
         resp = scraper.get(target_url, timeout=15)
         soup = BeautifulSoup(resp.text, 'html.parser')
-        cards = soup.select('.story-card, .content-card')
+        cards = soup.select('.story-card, .content-card, .video-card')
         for card in cards:
             link = card.find('a', href=True) or (card if card.name == 'a' else None)
-            title_tag = card.select_one('.title, h3, h2')
+            title_tag = card.select_one('.title, h3, h2, .caption')
             if link and title_tag:
-                full_link = BASE_URL + link['href'] if link['href'].startswith('/') else link['href']
+                href = link['href']
+                full_link = BASE_URL + href if href.startswith('/') else href
                 episodes.append({
                     "ad": title_tag.get_text(strip=True),
                     "link": full_link
                 })
-        return episodes[::-1] # Eskiden yeniye sırala
+        return episodes[::-1] # Eskiden yeniye
     except: return []
 
 def run_scraper():
-    print("🚀 Kanal D Arşiv Oluşturucu Başlatıldı...")
+    print("🚀 Kanal D Çoklu Sayfa Arşiv Tarayıcı Başlatıldı...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
     series_data = {}
-    try:
-        response = scraper.get(f"{BASE_URL}/diziler", timeout=20)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        cards = soup.select('a.poster-card')
+    page = 1
+    
+    while True:
+        print(f"\n📄 Sayfa {page} taranıyor...")
+        try:
+            response = scraper.get(f"{ARCHIVE_URL}{page}", timeout=20)
+            if response.status_code != 200: break
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            cards = soup.select('a.poster-card')
+            
+            if not cards: 
+                print("🏁 Taranacak başka sayfa kalmadı.")
+                break
 
-        for idx, card in enumerate(cards[:20], 1): # İlk 20 diziyi al
-            title = card.get('title') or card.find('img').get('alt', 'Dizi')
-            href = card.get('href')
-            print(f"[{idx}] 📺 {title} taranıyor...")
-            
-            full_url = BASE_URL + href if href.startswith('/') else href
-            eps = get_series_episodes(scraper, full_url)
-            
-            if eps:
-                img = card.find('img')
-                poster = img.get('data-src') or img.get('src', '')
-                if not poster.startswith('http'): poster = "https:" + poster
+            for card in cards:
+                title = card.get('title') or card.find('img').get('alt', 'Dizi')
+                href = card.get('href')
+                dizi_id = slugify(title)
                 
-                series_data[slugify(title)] = {
-                    "resim": poster,
-                    "bolumler": eps
-                }
-                print(f"    ✅ {len(eps)} bölüm bulundu.")
-            time.sleep(0.3)
+                if dizi_id in series_data: continue # Zaten eklenmişse atla
 
+                print(f"  📺 {title} işleniyor...")
+                full_url = BASE_URL + href if href.startswith('/') else href
+                eps = get_series_episodes(scraper, full_url)
+                
+                if eps:
+                    img = card.find('img')
+                    poster = img.get('data-src') or img.get('src', '')
+                    if not poster.startswith('http'): poster = "https:" + poster
+                    
+                    series_data[dizi_id] = {
+                        "resim": poster,
+                        "bolumler": eps
+                    }
+            
+            page += 1
+            time.sleep(1) # Siteyi yormamak için kısa bekleme
+            
+        except Exception as e:
+            print(f"❌ Sayfa {page} hatası: {e}")
+            break
+
+    if series_data:
         create_html(series_data)
-
-    except Exception as e:
-        print(f"❌ Hata: {e}")
+    else:
+        print("❌ Hiç veri toplanamadı!")
 
 def create_html(series_data):
-    file_name = "kanald_archive.html"
+    file_name = "kanald_vod.html"
     json_data = json.dumps(series_data, ensure_ascii=False)
     
-    # SENİN SHOWTV İÇİN VERDİĞİN GÖZ ALICI TASARIM
+    # ME TV - SHOW TV TASARIMI İLE AYNI MODERN ARAYÜZ
     html_template = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>ME TV KANAL D VOD</title>
+    <title>ME TV KANAL D ARŞİV</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://kit.fontawesome.com/bbe955c5ed.js" crossorigin="anonymous"></script>
     <style>
-        body {{ margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; }}
-        .aramapanel {{ width: 100%; height: 60px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
-        .logo-area {{ display: flex; align-items: center; }}
-        .logo-area img {{ width: 40px; margin-right: 10px; }}
-        .aramapanelyazi {{ height: 35px; background: #222; border: 1px solid #444; color: white; padding: 0 10px; border-radius: 4px; }}
-        .aramapanelbuton {{ height: 35px; background: #572aa7; color: white; border: none; padding: 0 15px; cursor: pointer; }}
-        .filmpaneldis {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 20px; }}
-        .filmpanel {{ background: #15161a; border: 1px solid #323442; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }}
-        .filmpanel:hover {{ border-color: #572aa7; transform: scale(1.05); }}
-        .filmresim img {{ width: 100%; height: 200px; object-fit: cover; }}
-        .filmisimpanel {{ position: absolute; bottom: 0; background: linear-gradient(transparent, black); width: 100%; padding: 10px; box-sizing: border-box; }}
-        .filmisim {{ font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        body {{ margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; overflow-x: hidden; }}
+        .aramapanel {{ width: 100%; height: 65px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }}
+        .logo-area {{ display: flex; align-items: center; font-weight: bold; font-size: 18px; color: #572aa7; }}
+        .logo-area img {{ height: 40px; margin-right: 12px; }}
+        .search-area input {{ background: #0a0e17; border: 1px solid #323442; color: white; padding: 8px 15px; border-radius: 20px; outline: none; width: 200px; transition: 0.3s; }}
+        .search-area input:focus {{ border-color: #572aa7; width: 250px; }}
+        .filmpaneldis {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 25px; }}
+        .filmpanel {{ background: #15161a; border: 1px solid #323442; border-radius: 12px; overflow: hidden; cursor: pointer; transition: 0.4s; position: relative; aspect-ratio: 2/3; }}
+        .filmpanel:hover {{ border-color: #572aa7; transform: translateY(-5px); box-shadow: 0 5px 15px rgba(87, 42, 167, 0.3); }}
+        .filmresim img {{ width: 100%; height: 100%; object-fit: cover; }}
+        .filmisimpanel {{ position: absolute; bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); width: 100%; padding: 15px 10px; box-sizing: border-box; }}
+        .filmisim {{ font-size: 13px; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
         .hidden {{ display: none !important; }}
-        .playerpanel {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 2000; display: none; }}
-        .geri-btn {{ background: #572aa7; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 10px; border-radius: 5px; }}
+        .playerpanel {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; }}
+        .geri-btn {{ background: #572aa7; color: white; padding: 10px 25px; border: none; cursor: pointer; margin: 20px; border-radius: 30px; font-weight: bold; transition: 0.3s; }}
+        .geri-btn:hover {{ background: #fff; color: #572aa7; }}
+        @media (max-width: 600px) {{ .filmpaneldis {{ grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px; }} }}
     </style>
 </head>
 <body>
     <div class="aramapanel">
-        <div class="logo-area"><img src="https://i.hizliresim.com/t6e66bt.png"><span>ME TV KANAL D</span></div>
-        <div class="search-area">
-            <input type="text" id="seriesSearch" placeholder="Dizi Ara..." class="aramapanelyazi" oninput="search()">
-        </div>
+        <div class="logo-area"><img src="https://i.hizliresim.com/t6e66bt.png">ME TV</div>
+        <div class="search-area"><input type="text" id="seriesSearch" placeholder="Dizi/Film Ara..." oninput="search()"></div>
     </div>
 
     <div id="diziListesiContainer" class="filmpaneldis"></div>
 
     <div id="bolumContainer" class="hidden">
-        <button class="geri-btn" onclick="geriDon()">← Geri Dön</button>
+        <button class="geri-btn" onclick="geriDon()">← ANA SAYFA</button>
         <div id="bolumListesi" class="filmpaneldis"></div>
     </div>
 
     <div id="playerpanel" class="playerpanel">
-        <button class="geri-btn" onclick="geriPlayer()">← Kapat</button>
-        <div id="main-player" style="height: calc(100% - 60px);"></div>
+        <button class="geri-btn" onclick="geriPlayer()">← KAPAT</button>
+        <div id="main-player" style="height: calc(100% - 100px);"></div>
     </div>
 
     <script>
@@ -154,6 +173,7 @@ def create_html(series_data):
         }}
 
         function showBolumler(key) {{
+            window.scrollTo(0,0);
             document.getElementById("diziListesiContainer").classList.add("hidden");
             document.getElementById("bolumContainer").classList.remove("hidden");
             const list = document.getElementById("bolumListesi");
@@ -169,8 +189,7 @@ def create_html(series_data):
 
         function showPlayer(link) {{
             document.getElementById("playerpanel").style.display = "block";
-            const playerArea = document.getElementById("main-player");
-            playerArea.innerHTML = `<iframe src="${{BRADMAX_URL + encodeURIComponent(link)}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+            document.getElementById("main-player").innerHTML = `<iframe src="${{BRADMAX_URL + encodeURIComponent(link)}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
         }}
 
         function geriDon() {{
@@ -198,7 +217,7 @@ def create_html(series_data):
     with open(file_name, "w", encoding="utf-8") as f:
         f.write(html_template)
     
-    print(f"✅ Dosya oluşturuldu: {file_name}")
+    print(f"\n✅ {len(series_data)} dizi ile dosya hazır: {file_name}")
     if os.getenv('GITHUB_ACTIONS') == 'true' or os.path.exists('.git'):
         commit_and_push(file_name)
 
