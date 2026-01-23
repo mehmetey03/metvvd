@@ -1,11 +1,11 @@
-name: ME TV Scraper Suite
+name: NowTV Scraper
 
 on:
   workflow_dispatch:
   push:
     branches: [ "main" ]
   schedule:
-    - cron: '0 9 * * *' # Her gün Türkiye saatiyle 12:00 civarı çalışır
+    - cron: '0 9 * * *' # Her gün Türkiye saatiyle 12:00'de otomatik çalışır
 
 jobs:
   build:
@@ -26,31 +26,21 @@ jobs:
         run: |
           pip install requests beautifulsoup4 cloudscraper
 
-      - name: Kanal D Tarayıcıyı Çalıştır
-        run: python kanald.py
-        continue-on-error: true # Biri hata verirse diğerine geçsin
-
-      - name: Now TV Tarayıcıyı Çalıştır
+      - name: Now TV Scriptini Çalıştır
         run: python nowtv.py
-        continue-on-error: true
-
-      - name: Show TV Tarayıcıyı Çalıştır (Varsa)
-        run: python showtv.py
-        continue-on-error: true
 
       - name: Değişiklikleri Repoya Yükle
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Oluşan tüm HTML dosyalarını ekle
-          git add *.html
+          # Sadece Now TV ile ilgili dosyaları ekle
+          git add nowtv_vod.html
           
-          # Değişiklik var mı kontrol et ve pushla
+          # Değişiklik varsa commit ve push yap
           if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "🔄 VOD Arşivi Güncellendi: $(date +'%Y-%m-%d %H:%M')"
+            git commit -m "🔄 Now TV Arşivi Güncellendi: $(date +'%d.%m.%Y %H:%M')"
             git push
-            print "✅ Tüm dosyalar başarıyla güncellendi."
           else
-            echo "ℹ️ Hiçbir değişiklik bulunamadı, push yapılmadı."
+            echo "Değişiklik yok, atlanıyor."
           fi
