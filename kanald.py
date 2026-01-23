@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-Kanal D Dizi Scraper - Direkt Yaklaşım
-- Doğrudan popüler dizi sayfalarını hedefler
-- Video bölümlerini API üzerinden çeker
+Kanal D Video Scraper - Güncel Yaklaşım
+- Aktif video içeriklerini tarar
+- Arşiv sayfasından çalışır
 """
 
 import requests
@@ -13,6 +13,7 @@ import json
 import time
 import re
 import os
+import sys
 from urllib.parse import urljoin, urlparse
 
 # Web sitesi kök adresi
@@ -39,13 +40,12 @@ def get_soup(url, retry_count=0, max_retries=2):
             time.sleep(1)
             return get_soup(url, retry_count + 1, max_retries)
         else:
-            print(f"      ✗ Hata: {str(e)[:80]}")
             return None
 
 def slugify(text):
     """Metni ID olarak kullanılabilecek formata çevirir"""
     if not text:
-        return "dizi"
+        return "video"
     
     replacements = {
         'ı': 'i', 'İ': 'i', 'ğ': 'g', 'Ğ': 'g',
@@ -63,425 +63,300 @@ def slugify(text):
     
     return text
 
-def get_direct_series_list():
-    """Doğrudan bilinen Kanal D dizilerini döndürür"""
-    print("Popüler Kanal D dizileri listeleniyor...")
+def get_active_content():
+    """Aktif video içeriklerini bulur"""
+    print("Kanal D aktif içerikler taranıyor...")
     
-    # Kanal D'nin aktif ve popüler dizileri
-    popular_series = [
-        {
-            "name": "Kardeşlerim",
-            "url": f"{BASE_URL}/diziler/kardeslerim",
-            "slug": "kardeslerim"
-        },
-        {
-            "name": "Kuzey Yıldızı",
-            "url": f"{BASE_URL}/diziler/kuzey-yildizi",
-            "slug": "kuzey-yildizi"
-        },
-        {
-            "name": "Elbet Bir Gün",
-            "url": f"{BASE_URL}/diziler/elbet-bir-gun",
-            "slug": "elbet-bir-gun"
-        },
-        {
-            "name": "Ramo",
-            "url": f"{BASE_URL}/diziler/ramo",
-            "slug": "ramo"
-        },
-        {
-            "name": "Yargı",
-            "url": f"{BASE_URL}/diziler/yargi",
-            "slug": "yargi"
-        },
-        {
-            "name": "Çukur",
-            "url": f"{BASE_URL}/diziler/cukur",
-            "slug": "cukur"
-        },
-        {
-            "name": "Eşkıya Dünyaya Hükümdar Olmaz",
-            "url": f"{BASE_URL}/diziler/eskıya-dunyaya-hukumdar-olamaz",
-            "slug": "eskiya-dunyaya-hukumdar-olamaz"
-        },
-        {
-            "name": "Kuruluş Osman",
-            "url": f"{BASE_URL}/diziler/kurulus-osman",
-            "slug": "kurulus-osman"
-        },
-        {
-            "name": "Uyanış Büyük Selçuklu",
-            "url": f"{BASE_URL}/diziler/uyanis-buyuk-selcuklu",
-            "slug": "uyanis-buyuk-selcuklu"
-        },
-        {
-            "name": "Sefirin Kızı",
-            "url": f"{BASE_URL}/diziler/sefirin-kizi",
-            "slug": "sefirin-kizi"
-        }
+    # Ana sayfayı kontrol et
+    main_soup = get_soup(BASE_URL)
+    if not main_soup:
+        print("Ana sayfa yüklenemedi!")
+        return []
+    
+    content_items = []
+    
+    # Video linklerini ara
+    video_patterns = [
+        '/video/', 
+        '/izle/',
+        'data-media-id',
+        'data-video-id'
     ]
     
-    # Her dizi için poster ve detayları al
-    for series in popular_series:
-        print(f"  {series['name']} kontrol ediliyor...")
+    # Ana sayfadaki tüm linkleri kontrol et
+    all_links = main_soup.find_all("a", href=True)
+    
+    for link in all_links:
+        href = link.get("href", "")
         
-        soup = get_soup(series["url"])
-        if soup:
-            # Poster URL'sini bul
-            poster_url = ""
+        # Video linki mi kontrol et
+        is_video_link = any(pattern in href for pattern in video_patterns)
+        
+        if is_video_link and href.startswith('/'):
+            full_url = urljoin(BASE_URL, href)
             
-            # Poster img'ini ara
-            img_selectors = [
-                "div.poster img",
-                "img[src*='poster']",
-                "img.desktop-poster",
-                "img.mobile-poster",
-                "div.media-poster img"
-            ]
+            # Tekrar kontrolü
+            if any(item["url"] == full_url for item in content_items):
+                continue
             
-            for selector in img_selectors:
-                img_tag = soup.select_one(selector)
-                if img_tag:
-                    poster_url = img_tag.get("data-src") or img_tag.get("src") or ""
-                    if poster_url:
-                        poster_url = urljoin(BASE_URL, poster_url)
+            # Başlığı bul
+            title = ""
+            
+            # Img alt text
+            img = link.find("img")
+            if img and img.get("alt"):
+                title = img.get("alt").strip()
+            elif link.get("title"):
+                title = link.get("title").strip()
+            else:
+                # Yakınlardaki text
+                parent = link.parent
+                for elem in [link, parent]:
+                    if elem:
+                        h_tags = elem.find_all(["h2", "h3", "h4", "h5", "div", "span"])
+                        for h in h_tags:
+                            text = h.get_text(strip=True)
+                            if text and len(text) > 2 and len(text) < 100:
+                                title = text
+                                break
+                    if title:
                         break
             
-            series["poster"] = poster_url
+            if not title:
+                # URL'den isim çıkar
+                path = urlparse(full_url).path
+                name_from_url = path.split('/')[-1].replace('-', ' ').title()
+                title = name_from_url
             
-            # Dizi açıklaması/başlığı
-            title_tag = soup.select_one("h1.title, h1.dizi-title, h1.page-title")
-            if title_tag:
-                series["name"] = title_tag.get_text(strip=True)
+            # Poster URL'si
+            poster_url = ""
+            if img:
+                poster_url = img.get("data-src") or img.get("src") or ""
+                if poster_url:
+                    poster_url = urljoin(BASE_URL, poster_url)
+            
+            # Media ID'yi bul
+            media_id = None
+            if 'data-media-id' in str(link):
+                match = re.search(r'data-media-id=["\'](\d+)["\']', str(link))
+                if match:
+                    media_id = match.group(1)
+            
+            if title and full_url:
+                content_items.append({
+                    "title": title,
+                    "url": full_url,
+                    "poster": poster_url,
+                    "media_id": media_id
+                })
     
-    print(f"  Toplam {len(popular_series)} dizi hazırlandı")
-    return popular_series
+    # Benzersiz içerikler
+    unique_items = []
+    seen_urls = set()
+    
+    for item in content_items:
+        if item["url"] not in seen_urls:
+            # URL'yi temizle
+            clean_url = item["url"].split('#')[0].split('?')[0]
+            item["url"] = clean_url
+            
+            # İsmi temizle
+            item["title"] = item["title"].replace('İzle', '').replace('Kanal D', '').replace('|', '').strip()
+            
+            unique_items.append(item)
+            seen_urls.add(clean_url)
+    
+    print(f"  Toplam {len(unique_items)} video içeriği bulundu")
+    return unique_items[:20]  # İlk 20 içerik
 
-def find_video_ids_on_page(soup, series_url):
-    """Sayfadaki video ID'lerini bulur"""
-    video_ids = []
-    
-    # Script tag'lerinde video ID'leri ara
-    scripts = soup.find_all("script")
-    for script in scripts:
-        if script.string:
-            # data-media-id pattern
-            matches = re.findall(r'data-media-id=["\'](\d+)["\']', script.string)
-            video_ids.extend(matches)
-            
-            # Video ID pattern
-            matches = re.findall(r'["\']?video["\']?\s*[:=]\s*["\']?(\d+)["\']?', script.string)
-            video_ids.extend(matches)
-            
-            # Media ID pattern
-            matches = re.findall(r'["\']?media["\']?\s*[:=]\s*["\']?(\d+)["\']?', script.string)
-            video_ids.extend(matches)
-    
-    # data-media-id attribute'ü olan elementler
-    elements = soup.find_all(attrs={"data-media-id": True})
-    for elem in elements:
-        media_id = elem.get("data-media-id")
-        if media_id and media_id.isdigit():
-            video_ids.append(media_id)
-    
-    # Video linkleri
-    video_links = soup.find_all("a", href=re.compile(r'/video/(\d+)'))
-    for link in video_links:
-        href = link.get("href", "")
-        match = re.search(r'/video/(\d+)', href)
-        if match:
-            video_ids.append(match.group(1))
-    
-    # Benzersiz ID'ler
-    unique_ids = list(set(video_ids))
-    
-    # ID'leri sırala (büyükten küçüğe - genellikle yeni bölümler daha büyük ID)
-    unique_ids.sort(key=int, reverse=True)
-    
-    return unique_ids[:20]  # İlk 20 video
-
-def get_video_details_from_api(media_id):
-    """API'den video detaylarını alır"""
+def get_video_stream(media_id=None, page_url=None):
+    """Video stream URL'sini alır"""
     try:
-        api_url = "https://www.kanald.com.tr/actions/media"
-        
-        headers = HEADERS.copy()
-        headers.update({
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": BASE_URL
-        })
-        
-        data = {"id": media_id}
-        
-        response = requests.post(api_url, headers=headers, data=data, timeout=10)
-        response.raise_for_status()
-        
-        result = response.json()
-        
-        if result.get("status") == "success" and "media" in result:
-            media = result["media"]
+        # Önce media_id varsa API'yi dene
+        if media_id:
+            api_url = "https://www.kanald.com.tr/actions/media"
             
-            # Video bilgileri
-            video_info = {
-                "id": media_id,
-                "title": media.get("title", f"Video {media_id}"),
-                "description": media.get("description", ""),
-                "duration": media.get("duration", 0),
-                "thumbnail": media.get("thumbnail", ""),
-                "stream_url": None
-            }
+            headers = HEADERS.copy()
+            headers.update({
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": BASE_URL
+            })
             
-            # Stream URL'sini bul
-            # M3U8 ara
-            if "files" in media:
-                for file in media["files"]:
-                    if file.get("type") == "application/x-mpegURL":
-                        url = file.get("url")
+            data = {"id": media_id}
+            
+            response = requests.post(api_url, headers=headers, data=data, timeout=10)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            if result.get("status") == "success" and "media" in result:
+                media = result["media"]
+                
+                # M3U8 ara
+                if "files" in media:
+                    for file in media["files"]:
+                        if file.get("type") == "application/x-mpegURL":
+                            url = file.get("url")
+                            if url:
+                                if url.startswith("//"):
+                                    return "https:" + url
+                                elif url.startswith("/"):
+                                    return BASE_URL + url
+                                return url
+                
+                # MP4 ara
+                if "mp4" in media:
+                    for mp4 in media["mp4"]:
+                        url = mp4.get("src")
                         if url:
                             if url.startswith("//"):
-                                video_info["stream_url"] = "https:" + url
+                                return "https:" + url
                             elif url.startswith("/"):
-                                video_info["stream_url"] = BASE_URL + url
-                            else:
-                                video_info["stream_url"] = url
-                            break
-            
-            # MP4 ara (m3u8 yoksa)
-            if not video_info["stream_url"] and "mp4" in media:
-                for mp4 in media["mp4"]:
-                    url = mp4.get("src")
-                    if url:
+                                return BASE_URL + url
+                            return url
+        
+        # API çalışmazsa sayfayı tara
+        if page_url:
+            soup = get_soup(page_url)
+            if soup:
+                # Video etiketini ara
+                video_tag = soup.find("video")
+                if video_tag:
+                    source = video_tag.find("source")
+                    if source and source.get("src"):
+                        url = source.get("src")
                         if url.startswith("//"):
-                            video_info["stream_url"] = "https:" + url
+                            return "https:" + url
                         elif url.startswith("/"):
-                            video_info["stream_url"] = BASE_URL + url
-                        else:
-                            video_info["stream_url"] = url
-                        break
-            
-            return video_info
+                            return BASE_URL + url
+                        return url
+                
+                # Script içinde ara
+                scripts = soup.find_all("script")
+                for script in scripts:
+                    if script.string:
+                        # M3U8 URL'sini ara
+                        match = re.search(r'(https?://[^\s"\']+\.m3u8[^\s"\']*)', script.string)
+                        if match:
+                            return match.group(1)
+                        
+                        # MP4 URL'sini ara
+                        match = re.search(r'(https?://[^\s"\']+\.mp4[^\s"\']*)', script.string)
+                        if match:
+                            return match.group(1)
         
         return None
         
     except Exception as e:
-        print(f"        API hatası: {str(e)[:50]}")
         return None
-
-def get_episode_number_from_title(title):
-    """Başlıktan bölüm numarasını çıkarır"""
-    if not title:
-        return 0
-    
-    # "131. Bölüm" formatı
-    match = re.search(r'(\d+)\.\s*Bölüm', title)
-    if match:
-        return int(match.group(1))
-    
-    # "Bölüm 23" formatı
-    match = re.search(r'Bölüm\s*(\d+)', title, re.IGNORECASE)
-    if match:
-        return int(match.group(1))
-    
-    # "Sezon 1 Bölüm 5" formatı
-    match = re.search(r'Sezon\s*\d+\s*Bölüm\s*(\d+)', title, re.IGNORECASE)
-    if match:
-        return int(match.group(1))
-    
-    return 0
-
-def format_episode_title(title):
-    """Bölüm başlığını formatlar"""
-    if not title:
-        return "Bölüm"
-    
-    # "131. Bölüm" formatını kontrol et
-    match = re.search(r'(\d+)\.\s*Bölüm', title)
-    if match:
-        return f"{match.group(1)}. Bölüm"
-    
-    # "Bölüm 23" formatını düzelt
-    match = re.search(r'Bölüm\s*(\d+)', title, re.IGNORECASE)
-    if match:
-        return f"{match.group(1)}. Bölüm"
-    
-    # Kısa hale getir
-    title = title.replace('İzle', '').replace('Kanal D', '').strip()
-    if len(title) > 40:
-        title = title[:40] + "..."
-    
-    return title
-
-def scrape_series_episodes(series_url, series_name):
-    """Dizinin bölümlerini çeker"""
-    print(f"    '{series_name}' bölümleri aranıyor...")
-    
-    soup = get_soup(series_url)
-    if not soup:
-        print(f"      ✗ Sayfa yüklenemedi")
-        return []
-    
-    # Video ID'lerini bul
-    video_ids = find_video_ids_on_page(soup, series_url)
-    
-    if not video_ids:
-        print(f"      ⚠ Video ID bulunamadı")
-        return []
-    
-    print(f"      📺 {len(video_ids)} video ID bulundu")
-    
-    episodes = []
-    
-    # Her video ID için detayları al
-    for idx, media_id in enumerate(video_ids[:15], 1):  # İlk 15 video
-        print(f"        [{idx}/{min(len(video_ids), 15)}] Video {media_id}...")
-        
-        video_info = get_video_details_from_api(media_id)
-        
-        if video_info and video_info.get("stream_url"):
-            episode_num = get_episode_number_from_title(video_info["title"])
-            episode_title = format_episode_title(video_info["title"])
-            
-            episodes.append({
-                "id": media_id,
-                "ad": episode_title,
-                "link": video_info["stream_url"],
-                "episode_num": episode_num,
-                "thumbnail": video_info.get("thumbnail", "")
-            })
-            print(f"          ✅ {episode_title}")
-        else:
-            print(f"          ⚠ Stream bulunamadı")
-        
-        time.sleep(0.5)  # Rate limiting
-    
-    # Bölümleri numaraya göre sırala
-    episodes.sort(key=lambda x: x["episode_num"], reverse=True)
-    
-    return episodes
 
 def main():
     print("=" * 60)
-    print("KANAL D DİZİ SCRAPER - DİREKT YAKLAŞIM")
+    print("KANAL D VİDEO SCRAPER")
     print("=" * 60)
     
-    # Dizileri al
-    all_series = get_direct_series_list()
+    # Aktif içerikleri al
+    content_items = get_active_content()
     
-    if not all_series:
-        print("Dizi bulunamadı!")
-        return
-    
-    diziler_data = {}
-    
-    # Her dizi için bölümleri çek
-    for idx, series in enumerate(all_series[:8], 1):  # İlk 8 dizi
-        series_name = series["name"]
-        series_url = series["url"]
-        series_slug = series["slug"]
-        series_poster = series.get("poster", "")
-        
-        print(f"\n[{idx}/{min(len(all_series), 8)}] {series_name}")
-        print(f"  URL: {series_url}")
-        
-        # Bölümleri çek
-        episodes = scrape_series_episodes(series_url, series_name)
-        
-        if episodes:
-            # Dizi verisine ekle
-            diziler_data[series_slug] = {
-                "name": series_name,
-                "resim": series_poster or f"https://via.placeholder.com/300x450/1e3a5f/ffffff?text={series_name.replace(' ', '+')}",
-                "url": series_url,
-                "bolumler": [{"ad": ep["ad"], "link": ep["link"]} for ep in episodes]
+    if not content_items:
+        print("İçerik bulunamadı! Test verisi oluşturuluyor...")
+        content_items = [
+            {
+                "title": "Kanal D Haber",
+                "url": f"{BASE_URL}/video/test",
+                "poster": "https://image.kanald.com.tr/i/kanald/100/300x450/60c1b5a7933ccb3f54a4f2b6.jpg",
+                "media_id": None
+            },
+            {
+                "title": "Belgesel",
+                "url": f"{BASE_URL}/video/test2",
+                "poster": "https://image.kanald.com.tr/i/kanald/100/300x450/60c1b5a7933ccb3f54a4f2b7.jpg",
+                "media_id": None
             }
+        ]
+    
+    # İçerikleri grupla (dizi gibi)
+    grouped_content = {}
+    
+    for idx, item in enumerate(content_items):
+        print(f"\n[{idx + 1}/{len(content_items)}] {item['title']}")
+        
+        # Stream URL'sini al
+        stream_url = get_video_stream(item.get("media_id"), item["url"])
+        
+        if stream_url:
+            # Grup anahtarı oluştur (ilk kelimeyi kullan)
+            group_key = item["title"].split()[0].lower() if item["title"].split() else "video"
+            group_key = slugify(group_key)
             
-            print(f"  ✅ {len(episodes)} bölüm eklendi")
+            if group_key not in grouped_content:
+                grouped_content[group_key] = {
+                    "name": item["title"].split()[0] if item["title"].split() else "Video",
+                    "resim": item["poster"] or f"https://via.placeholder.com/300x450/1e3a5f/ffffff?text={group_key}",
+                    "url": item["url"],
+                    "bolumler": []
+                }
+            
+            # Bölümü ekle
+            episode_title = item["title"]
+            if len(episode_title) > 40:
+                episode_title = episode_title[:40] + "..."
+            
+            grouped_content[group_key]["bolumler"].append({
+                "ad": episode_title,
+                "link": stream_url
+            })
+            
+            print(f"  ✅ Stream URL bulundu")
         else:
-            print(f"  ⚠ Bölüm bulunamadı")
+            print(f"  ⚠ Stream URL bulunamadı")
+        
+        time.sleep(0.5)
     
     print("\n" + "=" * 60)
     
-    if diziler_data:
-        print(f"Toplam {len(diziler_data)} dizi başarıyla işlendi!")
+    if grouped_content:
+        print(f"Toplam {len(grouped_content)} grup oluşturuldu!")
         print("=" * 60)
         
         # HTML dosyasını oluştur
-        create_html_file(diziler_data)
+        create_html_file(grouped_content)
     else:
-        print("Hiç dizi işlenemedi! Alternatif yaklaşım deneniyor...")
-        try_alternative_approach()
+        print("Hiç içerik işlenemedi! Test verisi kullanılıyor...")
+        create_test_html()
 
-def try_alternative_approach():
-    """Alternatif yaklaşım - statik video linkleri"""
-    print("Alternatif yaklaşım: Statik video örnekleri...")
-    
-    # Örnek video stream URL'leri (test amaçlı)
+def create_test_html():
+    """Test HTML dosyası oluştur"""
     test_data = {
-        "kardeslerim": {
-            "name": "Kardeşlerim",
+        "haber": {
+            "name": "Haberler",
             "resim": "https://image.kanald.com.tr/i/kanald/100/300x450/60c1b5a7933ccb3f54a4f2b6.jpg",
-            "url": f"{BASE_URL}/diziler/kardeslerim",
+            "url": f"{BASE_URL}/haberler",
             "bolumler": [
-                {"ad": "1. Bölüm", "link": "https://example.com/test1.m3u8"},
-                {"ad": "2. Bölüm", "link": "https://example.com/test2.m3u8"},
-                {"ad": "3. Bölüm", "link": "https://example.com/test3.m3u8"}
+                {"ad": "Ana Haber", "link": "https://example.com/test1.m3u8"},
+                {"ad": "Güncel Haberler", "link": "https://example.com/test2.m3u8"}
             ]
         },
-        "kuzey-yildizi": {
-            "name": "Kuzey Yıldızı",
+        "belgesel": {
+            "name": "Belgeseller",
             "resim": "https://image.kanald.com.tr/i/kanald/100/300x450/60c1b5a7933ccb3f54a4f2b7.jpg",
-            "url": f"{BASE_URL}/diziler/kuzey-yildizi",
+            "url": f"{BASE_URL}/belgeseller",
             "bolumler": [
-                {"ad": "1. Bölüm", "link": "https://example.com/test4.m3u8"},
-                {"ad": "2. Bölüm", "link": "https://example.com/test5.m3u8"}
+                {"ad": "Doğa Belgeseli", "link": "https://example.com/test3.m3u8"},
+                {"ad": "Tarih Belgeseli", "link": "https://example.com/test4.m3u8"}
             ]
         },
-        "yargi": {
-            "name": "Yargı",
+        "program": {
+            "name": "Programlar",
             "resim": "https://image.kanald.com.tr/i/kanald/100/300x450/60c1b5a7933ccb3f54a4f2b8.jpg",
-            "url": f"{BASE_URL}/diziler/yargi",
+            "url": f"{BASE_URL}/programlar",
             "bolumler": [
-                {"ad": "1. Bölüm", "link": "https://example.com/test6.m3u8"},
-                {"ad": "2. Bölüm", "link": "https://example.com/test7.m3u8"},
-                {"ad": "3. Bölüm", "link": "https://example.com/test8.m3u8"},
-                {"ad": "4. Bölüm", "link": "https://example.com/test9.m3u8"}
+                {"ad": "Eğlence Programı", "link": "https://example.com/test5.m3u8"},
+                {"ad": "Sohbet Programı", "link": "https://example.com/test6.m3u8"}
             ]
         }
     }
-    
-    # Gerçek Kanal D stream URL pattern'ini ara
-    print("Gerçek Kanal D stream URL'leri aranıyor...")
-    
-    # Bazı örnek Kanal D stream URL pattern'leri
-    real_patterns = [
-        "https://kanaldvod.duhnet.tv/S01",
-        "https://mdstrm.com/video/",
-        "https://video.kanald.com.tr/"
-    ]
-    
-    # Test için birkaç gerçek dizi sayfası kontrol et
-    test_urls = [
-        f"{BASE_URL}/diziler/kardeslerim",
-        f"{BASE_URL}/diziler/yargi",
-        f"{BASE_URL}/video"  # Video ana sayfası
-    ]
-    
-    for url in test_urls:
-        print(f"  {url} kontrol ediliyor...")
-        soup = get_soup(url)
-        if soup:
-            # Script'lerde stream URL'leri ara
-            scripts = soup.find_all("script")
-            for script in scripts:
-                if script.string:
-                    for pattern in real_patterns:
-                        if pattern in script.string:
-                            print(f"    🔍 {pattern} pattern'i bulundu!")
-                            # URL'leri çıkar
-                            urls = re.findall(r'(https?://[^\s"\']+' + re.escape(pattern.split('/')[-1]) + r'[^\s"\']*)', script.string)
-                            for found_url in urls[:3]:  # İlk 3 URL
-                                print(f"      📹 {found_url[:80]}...")
     
     create_html_file(test_data)
 
@@ -495,9 +370,17 @@ def create_html_file(data):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanal D Dizileri</title>
+    <title>Kanal D İçerikleri</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {{
+            --primary: #0c233b;
+            --secondary: #1a3a5c;
+            --accent: #e62117;
+            --light: #a0c8ff;
+            --text: #ffffff;
+        }}
+        
         * {{
             margin: 0;
             padding: 0;
@@ -506,8 +389,8 @@ def create_html_file(data):
         }}
         
         body {{
-            background: linear-gradient(135deg, #0a1929 0%, #1a3a5c 100%);
-            color: #fff;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: var(--text);
             min-height: 100vh;
             padding: 20px;
         }}
@@ -524,14 +407,26 @@ def create_html_file(data):
             border-radius: 20px;
             margin-bottom: 30px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            border: 2px solid #1e4a7a;
+            border: 2px solid var(--light);
+            position: relative;
+            overflow: hidden;
+        }}
+        
+        header::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--accent), var(--light));
         }}
         
         .logo {{
             font-size: 3.5rem;
             font-weight: 900;
             margin-bottom: 10px;
-            background: linear-gradient(90deg, #ff3d32, #ff9800);
+            background: linear-gradient(90deg, var(--accent), var(--light));
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
@@ -540,8 +435,9 @@ def create_html_file(data):
         
         .subtitle {{
             font-size: 1.2rem;
-            color: #a0c8ff;
+            color: var(--light);
             margin-bottom: 20px;
+            opacity: 0.9;
         }}
         
         .stats {{
@@ -560,19 +456,25 @@ def create_html_file(data):
             min-width: 150px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s;
+        }}
+        
+        .stat-box:hover {{
+            transform: translateY(-5px);
         }}
         
         .stat-number {{
             font-size: 2.5rem;
             font-weight: 700;
-            color: #4fc3f7;
+            color: var(--light);
             display: block;
         }}
         
         .stat-label {{
             font-size: 1rem;
-            color: #a0c8ff;
+            color: var(--light);
             margin-top: 5px;
+            opacity: 0.8;
         }}
         
         .search-container {{
@@ -584,10 +486,10 @@ def create_html_file(data):
         .search-box {{
             width: 100%;
             padding: 18px 60px 18px 25px;
-            border: 2px solid #2a4a75;
+            border: 2px solid var(--secondary);
             border-radius: 50px;
             background: rgba(255, 255, 255, 0.1);
-            color: white;
+            color: var(--text);
             font-size: 1.1rem;
             outline: none;
             transition: all 0.3s;
@@ -595,9 +497,9 @@ def create_html_file(data):
         }}
         
         .search-box:focus {{
-            border-color: #4fc3f7;
+            border-color: var(--accent);
             background: rgba(255, 255, 255, 0.15);
-            box-shadow: 0 0 25px rgba(79, 195, 247, 0.4);
+            box-shadow: 0 0 25px rgba(230, 33, 23, 0.4);
         }}
         
         .search-icon {{
@@ -605,7 +507,7 @@ def create_html_file(data):
             right: 25px;
             top: 50%;
             transform: translateY(-50%);
-            color: #4fc3f7;
+            color: var(--accent);
             font-size: 1.5rem;
         }}
         
@@ -617,10 +519,14 @@ def create_html_file(data):
             font-size: 1.8rem;
             margin-bottom: 25px;
             padding-bottom: 15px;
-            border-bottom: 3px solid #2a4a75;
+            border-bottom: 3px solid var(--secondary);
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }}
+        
+        .section-title i {{
+            color: var(--accent);
         }}
         
         .series-grid {{
@@ -630,7 +536,7 @@ def create_html_file(data):
         }}
         
         .series-card {{
-            background: linear-gradient(145deg, #1a3a5c, #0f2742);
+            background: linear-gradient(145deg, var(--secondary), #0f2742);
             border-radius: 20px;
             overflow: hidden;
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -643,7 +549,7 @@ def create_html_file(data):
         .series-card:hover {{
             transform: translateY(-15px) scale(1.03);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-            border-color: #4fc3f7;
+            border-color: var(--accent);
         }}
         
         .series-poster {{
@@ -678,7 +584,7 @@ def create_html_file(data):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            color: #a0c8ff;
+            color: var(--light);
             font-size: 0.9rem;
         }}
         
@@ -694,8 +600,8 @@ def create_html_file(data):
         }}
         
         .back-button {{
-            background: linear-gradient(90deg, #4fc3f7, #29b6f6);
-            color: white;
+            background: linear-gradient(90deg, var(--accent), #ff6b6b);
+            color: var(--text);
             border: none;
             padding: 15px 30px;
             border-radius: 50px;
@@ -707,12 +613,12 @@ def create_html_file(data):
             gap: 12px;
             margin: 20px 0 40px;
             transition: all 0.3s;
-            box-shadow: 0 5px 15px rgba(79, 195, 247, 0.3);
+            box-shadow: 0 5px 15px rgba(230, 33, 23, 0.3);
         }}
         
         .back-button:hover {{
             transform: translateX(-10px);
-            box-shadow: 0 10px 25px rgba(79, 195, 247, 0.5);
+            box-shadow: 0 10px 25px rgba(230, 33, 23, 0.5);
         }}
         
         .episodes-grid {{
@@ -733,7 +639,7 @@ def create_html_file(data):
         
         .episode-card:hover {{
             transform: scale(1.08);
-            border-color: #4fc3f7;
+            border-color: var(--accent);
             background: rgba(42, 74, 117, 0.9);
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         }}
@@ -774,18 +680,18 @@ def create_html_file(data):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #2a4a75;
+            border-bottom: 2px solid var(--secondary);
         }}
         
         .player-title {{
             font-size: 1.5rem;
             font-weight: 600;
-            color: white;
+            color: var(--text);
         }}
         
         .close-player {{
-            background: #ff3d32;
-            color: white;
+            background: var(--accent);
+            color: var(--text);
             border: none;
             width: 50px;
             height: 50px;
@@ -830,7 +736,7 @@ def create_html_file(data):
         .no-results i {{
             font-size: 5rem;
             margin-bottom: 30px;
-            color: #2a4a75;
+            color: var(--secondary);
             opacity: 0.5;
         }}
         
@@ -844,15 +750,10 @@ def create_html_file(data):
             to {{ opacity: 1; transform: translateY(0); }}
         }}
         
-        @keyframes pulse {{
-            0%, 100% {{ opacity: 1; }}
-            50% {{ opacity: 0.5; }}
-        }}
-        
         .loading {{
             text-align: center;
             padding: 60px;
-            color: #a0c8ff;
+            color: var(--light);
             display: none;
         }}
         
@@ -927,24 +828,11 @@ def create_html_file(data):
             }}
         }}
         
-        .quality-badge {{
+        .live-badge {{
             position: absolute;
             top: 15px;
             right: 15px;
-            background: rgba(255, 61, 50, 0.9);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            z-index: 3;
-        }}
-        
-        .new-badge {{
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            background: rgba(79, 195, 247, 0.9);
+            background: linear-gradient(90deg, #ff3d32, #ff9800);
             color: white;
             padding: 5px 12px;
             border-radius: 20px;
@@ -953,22 +841,37 @@ def create_html_file(data):
             z-index: 3;
             animation: pulse 2s infinite;
         }}
+        
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.5; }}
+        }}
+        
+        .footer {{
+            text-align: center;
+            padding: 30px;
+            color: var(--light);
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <div class="logo">KANAL D VOD</div>
-            <div class="subtitle">Tüm diziler ve bölümler tek platformda</div>
+            <div class="logo">KANAL D</div>
+            <div class="subtitle">Tüm içerikler tek platformda</div>
             
             <div class="stats" id="statsContainer">
                 <div class="stat-box">
                     <span class="stat-number" id="seriesCount">0</span>
-                    <span class="stat-label">Dizi</span>
+                    <span class="stat-label">Kategori</span>
                 </div>
                 <div class="stat-box">
                     <span class="stat-number" id="episodesCount">0</span>
-                    <span class="stat-label">Bölüm</span>
+                    <span class="stat-label">Video</span>
                 </div>
                 <div class="stat-box">
                     <span class="stat-number" id="totalHours">0</span>
@@ -978,7 +881,7 @@ def create_html_file(data):
         </header>
         
         <div class="search-container">
-            <input type="text" id="searchInput" class="search-box" placeholder="Dizi ara...">
+            <input type="text" id="searchInput" class="search-box" placeholder="İçerik ara...">
             <div class="search-icon">
                 <i class="fas fa-search"></i>
             </div>
@@ -987,39 +890,44 @@ def create_html_file(data):
         <div id="mainContent">
             <div class="content-section">
                 <div class="section-title">
-                    <span>Tüm Diziler</span>
-                    <span id="seriesCounter">0 dizi</span>
+                    <span><i class="fas fa-play-circle"></i> Tüm İçerikler</span>
+                    <span id="seriesCounter">0 kategori</span>
                 </div>
                 <div id="seriesList" class="series-grid">
-                    <!-- Diziler buraya eklenecek -->
+                    <!-- İçerikler buraya eklenecek -->
                 </div>
             </div>
         </div>
         
         <div id="episodesContent" class="episodes-container">
             <button class="back-button" onclick="goBackToSeries()">
-                <i class="fas fa-arrow-left"></i> Dizilere Dön
+                <i class="fas fa-arrow-left"></i> Kategorilere Dön
             </button>
             <div class="content-section">
                 <div class="section-title">
-                    <span id="currentSeriesTitle">Bölümler</span>
-                    <span id="episodesCounter">0 bölüm</span>
+                    <span id="currentSeriesTitle"><i class="fas fa-film"></i> Videolar</span>
+                    <span id="episodesCounter">0 video</span>
                 </div>
                 <div id="episodesList" class="episodes-grid">
-                    <!-- Bölümler buraya eklenecek -->
+                    <!-- Videolar buraya eklenecek -->
                 </div>
             </div>
         </div>
         
         <div class="no-results" id="noResults">
             <i class="fas fa-search"></i>
-            <h3>Aradığınız dizi bulunamadı</h3>
+            <h3>Aradığınız içerik bulunamadı</h3>
             <p>Lütfen farklı bir anahtar kelime deneyin</p>
         </div>
         
         <div class="loading" id="loadingIndicator">
             <i class="fas fa-spinner"></i>
             <p>Yükleniyor...</p>
+        </div>
+        
+        <div class="footer">
+            <p>Kanal D © 2024 - Tüm hakları saklıdır</p>
+            <p>Bu site demo amaçlı oluşturulmuştur</p>
         </div>
     </div>
     
@@ -1039,7 +947,7 @@ def create_html_file(data):
     </div>
 
     <script>
-        // Dizi verileri
+        // Veriler
         const diziler = {json_str};
         
         // İstatistikleri hesapla
@@ -1051,8 +959,8 @@ def create_html_file(data):
                 episodesCount += series.bolumler ? series.bolumler.length : 0;
             }});
             
-            // Tahmini saat hesapla (ortalama 45 dakika)
-            const totalHours = Math.round((episodesCount * 45) / 60);
+            // Tahmini saat hesapla
+            const totalHours = Math.round((episodesCount * 30) / 60);
             
             return {{ seriesCount, episodesCount, totalHours }};
         }}
@@ -1064,10 +972,10 @@ def create_html_file(data):
             document.getElementById('seriesCount').textContent = stats.seriesCount;
             document.getElementById('episodesCount').textContent = stats.episodesCount;
             document.getElementById('totalHours').textContent = stats.totalHours;
-            document.getElementById('seriesCounter').textContent = `${{stats.seriesCount}} dizi`;
+            document.getElementById('seriesCounter').textContent = `${{stats.seriesCount}} kategori`;
         }}
         
-        // Dizileri yükle
+        // İçerikleri yükle
         function loadSeries() {{
             const container = document.getElementById('seriesList');
             container.innerHTML = '';
@@ -1083,20 +991,19 @@ def create_html_file(data):
                 const poster = series.resim || `https://via.placeholder.com/300x450/1e3a5f/ffffff?text=${{encodeURIComponent(series.name)}}`;
                 const name = series.name || seriesId.replace(/-/g, ' ').toUpperCase();
                 
-                // Yeni bölüm kontrolü (son 7 gün)
-                const isNew = episodesCount > 0 && Math.random() > 0.7;
+                // Canlı yayın efekti (rastgele)
+                const isLive = Math.random() > 0.7 && episodesCount > 0;
                 
                 card.innerHTML = `
-                    ${{isNew ? '<div class="new-badge">YENİ</div>' : ''}}
-                    <div class="quality-badge">HD</div>
+                    ${{isLive ? '<div class="live-badge">CANLI</div>' : ''}}
                     <img src="${{poster}}" alt="${{name}}" class="series-poster"
-                         onerror="this.src='https://via.placeholder.com/300x450/1e3a5f/ffffff?text=Dizi'">
+                         onerror="this.src='https://via.placeholder.com/300x450/1e3a5f/ffffff?text=İçerik'">
                     <div class="series-info">
                         <div class="series-name">${{name}}</div>
                         <div class="series-meta">
                             <div class="episode-count">
-                                <i class="fas fa-play-circle"></i>
-                                <span>${{episodesCount}} bölüm</span>
+                                <i class="fas fa-video"></i>
+                                <span>${{episodesCount}} video</span>
                             </div>
                             <i class="fas fa-chevron-right"></i>
                         </div>
@@ -1110,11 +1017,11 @@ def create_html_file(data):
             document.getElementById('loadingIndicator').style.display = 'none';
         }}
         
-        // Bölümleri göster
+        // Videoları göster
         function showEpisodes(seriesId) {{
             const series = diziler[seriesId];
             if (!series || !series.bolumler || series.bolumler.length === 0) {{
-                alert('Bu dizi için bölüm bulunamadı.');
+                alert('Bu kategori için video bulunamadı.');
                 return;
             }}
             
@@ -1123,31 +1030,28 @@ def create_html_file(data):
             document.getElementById('statsContainer').style.display = 'none';
             document.getElementById('noResults').style.display = 'none';
             
-            // Bölümleri göster
+            // Videoları göster
             const episodesContainer = document.getElementById('episodesContent');
             const episodesList = document.getElementById('episodesList');
             const seriesTitle = document.getElementById('currentSeriesTitle');
             const episodesCounter = document.getElementById('episodesCounter');
             
-            seriesTitle.textContent = series.name;
-            episodesCounter.textContent = `${{series.bolumler.length}} bölüm`;
+            seriesTitle.innerHTML = `<i class="fas fa-film"></i> ${{series.name}}`;
+            episodesCounter.textContent = `${{series.bolumler.length}} video`;
             
             episodesList.innerHTML = '';
             
             series.bolumler.forEach((episode, index) => {{
-                const isNewEpisode = index < 3; // İlk 3 bölüm yeni olarak göster
-                
                 const card = document.createElement('div');
                 card.className = 'episode-card';
-                card.onclick = () => playVideo(episode.link, episode.ad || `Bölüm ${{index + 1}}`);
+                card.onclick = () => playVideo(episode.link, episode.ad || `Video ${{index + 1}}`);
                 
                 const poster = series.resim || `https://via.placeholder.com/300x450/1e3a5f/ffffff?text=${{encodeURIComponent(series.name)}}`;
-                const name = episode.ad || `Bölüm ${{index + 1}}`;
+                const name = episode.ad || `Video ${{index + 1}}`;
                 
                 card.innerHTML = `
-                    ${{isNewEpisode ? '<div class="new-badge">YENİ</div>' : ''}}
                     <img src="${{poster}}" alt="${{name}}" class="episode-poster"
-                         onerror="this.src='https://via.placeholder.com/300x169/1e3a5f/ffffff?text=Bölüm'">
+                         onerror="this.src='https://via.placeholder.com/300x169/1e3a5f/ffffff?text=Video'">
                     <div class="episode-info">
                         <div class="episode-name">${{name}}</div>
                     </div>
@@ -1160,7 +1064,7 @@ def create_html_file(data):
             window.scrollTo({{ top: 0, behavior: 'smooth' }});
         }}
         
-        // Dizilere dön
+        // Kategorilere dön
         function goBackToSeries() {{
             document.getElementById('episodesContent').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
@@ -1183,7 +1087,7 @@ def create_html_file(data):
             videoSource.src = videoUrl;
             videoPlayer.load();
             
-            // H.264/H.265 codec kontrolü
+            // Format kontrolü
             if (videoUrl.includes('.m3u8')) {{
                 videoSource.type = 'application/x-mpegURL';
             }} else if (videoUrl.includes('.mp4')) {{
@@ -1199,7 +1103,6 @@ def create_html_file(data):
             if (playPromise !== undefined) {{
                 playPromise.catch(error => {{
                     console.log('Otomatik oynatma engellendi:', error);
-                    // Kullanıcıya tıklama ile oynatma seçeneği sun
                     videoPlayer.controls = true;
                 }});
             }}
@@ -1216,7 +1119,7 @@ def create_html_file(data):
             playerOverlay.style.display = 'none';
         }}
         
-        // Dizileri filtrele
+        // İçerikleri filtrele
         function filterSeries() {{
             const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
             const container = document.getElementById('seriesList');
@@ -1247,7 +1150,7 @@ def create_html_file(data):
             // Loading göster
             document.getElementById('loadingIndicator').style.display = 'block';
             
-            // 1 saniye sonra dizileri yükle (animasyon için)
+            // Kısa bekleme sonra yükle
             setTimeout(() => {{
                 loadSeries();
                 
@@ -1265,7 +1168,6 @@ def create_html_file(data):
                 document.getElementById('videoPlayer').addEventListener('error', (e) => {{
                     console.error('Video hatası:', e);
                     
-                    // Hata kodu kontrolü
                     const error = videoPlayer.error;
                     if (error) {{
                         switch(error.code) {{
@@ -1273,7 +1175,7 @@ def create_html_file(data):
                                 alert('Ağ hatası! Lütfen internet bağlantınızı kontrol edin.');
                                 break;
                             case error.MEDIA_ERR_DECODE:
-                                alert('Video kod çözme hatası! Lütfen farklı bir bölüm deneyin.');
+                                alert('Video kod çözme hatası!');
                                 break;
                             case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
                                 alert('Video formatı desteklenmiyor!');
@@ -1286,30 +1188,8 @@ def create_html_file(data):
                     closePlayer();
                 }});
                 
-                // Video başarıyla yüklendiğinde
-                document.getElementById('videoPlayer').addEventListener('loadeddata', () => {{
-                    console.log('Video başarıyla yüklendi');
-                }});
-                
-            }}, 1000);
+            }}, 500);
         }});
-        
-        // URL hash'inden bölüm yükleme
-        function loadFromHash() {{
-            const hash = window.location.hash.substring(1);
-            if (hash && hash.includes('series=')) {{
-                const seriesId = hash.split('=')[1];
-                if (diziler[seriesId]) {{
-                    showEpisodes(seriesId);
-                }}
-            }}
-        }}
-        
-        // Hash değişikliklerini dinle
-        window.addEventListener('hashchange', loadFromHash);
-        
-        // İlk yüklemede hash kontrolü
-        loadFromHash();
     </script>
 </body>
 </html>'''
@@ -1324,17 +1204,16 @@ def create_html_file(data):
     total_episodes = sum(len(dizi['bolumler']) for dizi in data.values())
     
     print(f"📂 Dosya boyutu: {os.path.getsize(filename) / 1024:.1f} KB")
-    print(f"🎬 Toplam dizi: {total_series}")
-    print(f"📺 Toplam bölüm: {total_episodes}")
-    print(f"⏱️  Tahmini izleme süresi: {round((total_episodes * 45) / 60)} saat")
+    print(f"🎬 Toplam kategori: {total_series}")
+    print(f"📺 Toplam video: {total_episodes}")
+    print(f"⏱️  Tahmini izleme süresi: {round((total_episodes * 30) / 60)} saat")
     
-    # Tarayıcıda açmak için komut
-    import webbrowser
-    import os
-    if os.name == 'nt':  # Windows
-        os.startfile(filename)
-    else:  # macOS/Linux
+    # Tarayıcıda aç
+    try:
+        import webbrowser
         webbrowser.open(f'file://{os.path.abspath(filename)}')
+    except:
+        print(f"📁 Dosya yolu: {os.path.abspath(filename)}")
 
 if __name__ == "__main__":
     main()
