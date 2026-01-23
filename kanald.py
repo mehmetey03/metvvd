@@ -1,85 +1,130 @@
 import cloudscraper
 from bs4 import BeautifulSoup
 import json
-import re
 
-BASE_URL = "https://www.kanald.com.tr"
-
-# Bot korumasını aşan scraper
-scraper = cloudscraper.create_scraper(
-    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-)
-
-def slugify(text):
-    # Karakter listesi eşitlendi (ı-i, ş-s, vb.)
-    tr_map = str.maketrans("ığüşöçİĞÜŞÖÇ", "igusoicigusoic")
-    text = text.translate(tr_map).lower()
-    text = re.sub(r'[^a-z0-9]', '', text)
-    return text
-
-def main():
-    print("🚀 Kanal D İçerikleri Taranıyor (Karakter Hatası Giderildi)...")
+def get_kanald_data():
+    print("🚀 Kanal D İçerik Kartları Taranıyor...")
     
-    targets = [
-        {"url": "/diziler", "label": "Diziler"},
-        {"url": "/programlar", "label": "Programlar"}
+    # Gerçek tarayıcı taklidi
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
+    
+    urls = [
+        "https://www.kanald.com.tr/diziler",
+        "https://www.kanald.com.tr/programlar"
     ]
     
-    diziler_data = {}
+    series_list = []
 
-    for target in targets:
-        print(f"📍 {target['label']} sayfası taranıyor...")
+    for url in urls:
         try:
-            response = scraper.get(BASE_URL + target['url'], timeout=20)
-            soup = BeautifulSoup(response.text, "html.parser")
+            print(f"🔗 {url} kaynağından veriler okunuyor...")
+            # Kanal D bazen hızlı istekleri bloklar, timeout'u koruyoruz
+            response = scraper.get(url, timeout=30)
+            soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Paylaştığın HTML'deki poster-card yapısını yakalıyoruz
-            cards = soup.find_all("a", class_="poster-card")
+            # Paylaştığın yapıdaki ana sınıf
+            cards = soup.find_all('a', class_='poster-card')
             
-            if not cards:
-                print(f"  ⚠️ Sayfa boş döndü. (Bot koruması hala aktif olabilir)")
-                continue
-
             for card in cards:
-                img_tag = card.find("img")
-                if not img_tag: continue
+                img_tag = card.find('img')
+                title = ""
+                if img_tag:
+                    # data-src varsa onu al (lazy load koruması)
+                    title = img_tag.get('alt') or img_tag.get('title')
                 
-                # Paylaştığın yapıdaki alt ve data-src verilerini çekiyoruz
-                dizi_adi = img_tag.get("alt", "").strip()
-                if not dizi_adi: 
-                    # Alt boşsa başlığı card içindeki span'dan ara
-                    title_span = card.find("span", class_="title")
-                    dizi_adi = title_span.get_text(strip=True) if title_span else "Bilinmeyen İçerik"
+                if not title:
+                    href = card.get('href', '')
+                    title = href.replace('/', '').replace('-', ' ').title()
 
-                dizi_href = card.get("href", "")
-                dizi_link = BASE_URL + dizi_href if dizi_href.startswith("/") else dizi_href
-                dizi_id = slugify(dizi_adi)
+                href = card.get('href', '')
+                full_url = "https://www.kanald.com.tr" + href if href.startswith('/') else href
                 
-                # Resim için paylaştığın 'data-src' en güveniliri
-                poster_url = img_tag.get("data-src") or img_tag.get("src") or ""
-                if poster_url.startswith("//"):
-                    poster_url = "https:" + poster_url
+                poster = ""
+                if img_tag:
+                    # Sırasıyla en kaliteli resmi arıyoruz
+                    poster = img_tag.get('data-src') or img_tag.get('src')
+                    if poster and poster.startswith("//"):
+                        poster = "https:" + poster
 
-                diziler_data[dizi_id] = {
-                    "ad": dizi_adi,
-                    "resim": poster_url,
-                    "link": dizi_link,
-                    "bolumler": [
-                        {"ad": "Tüm Bölümler", "link": dizi_link + "/bolumler"}
-                    ]
-                }
-                print(f"  [+] {dizi_adi} eklendi.")
-
+                if title and len(title) > 2:
+                    series_list.append({
+                        "name": title.strip(),
+                        "url": full_url,
+                        "resim": poster
+                    })
         except Exception as e:
-            print(f"  ❌ Beklenmedik Hata: {e}")
+            print(f"❌ {url} taranırken hata oluştu: {e}")
 
-    if diziler_data:
-        # JSON verisini dosyaya kaydet
-        with open("kanald_data.json", "w", encoding="utf-8") as f:
-            json.dump(diziler_data, f, ensure_ascii=False, indent=4)
-        print(f"\n✨ Başarılı! {len(diziler_data)} içerik bulundu ve kanald_data.json dosyasına kaydedildi.")
-    else:
-        print("❌ Veri çekilemedi. Lütfen internet bağlantını veya siteye erişimi kontrol et.")
+    # Duplikeleri temizle
+    unique_data = []
+    seen = set()
+    for item in series_list:
+        if item['name'] not in seen:
+            unique_data.append(item)
+            seen.add(item['name'])
+
+    print(f"✅ Toplam {len(unique_data)} adet benzersiz içerik yakalandı.")
+    return unique_data
+
+def create_html(data):
+    json_data = json.dumps(data, ensure_ascii=False)
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Kanal D Arşivi</title>
+        <style>
+            body {{ background: #0b0f19; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }}
+            h1 {{ text-align: center; color: #3a86ff; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 2px; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; max-width: 1300px; margin: 0 auto; }}
+            .card {{ background: #161d2f; border-radius: 12px; overflow: hidden; border: 1px solid #232d45; transition: 0.3s; text-decoration: none; color: inherit; display: block; }}
+            .card:hover {{ transform: translateY(-8px); border-color: #3a86ff; box-shadow: 0 12px 25px rgba(0,0,0,0.6); }}
+            .img-container {{ position: relative; width: 100%; padding-top: 145%; background: #05080f; }}
+            .img-container img {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }}
+            .info {{ padding: 12px; text-align: center; background: linear-gradient(to top, #161d2f, transparent); }}
+            .info h3 {{ margin: 0; font-size: 14px; height: 36px; overflow: hidden; display: flex; align-items: center; justify-content: center; line-height: 1.2; }}
+        </style>
+    </head>
+    <body>
+        <h1>📺 KANAL D ARŞİVİ ({len(data)} İÇERİK)</h1>
+        <div class="grid" id="main-grid"></div>
+        <script>
+            const streamData = {json_data};
+            const grid = document.getElementById('main-grid');
+            streamData.forEach(item => {{
+                const card = document.createElement('a');
+                card.className = 'card';
+                card.href = item.url;
+                card.target = '_blank';
+                card.innerHTML = `
+                    <div class="img-container">
+                        <img src="${{item.resim}}" loading="lazy" onerror="this.src='https://via.placeholder.com/264x365?text=Resim+Yok'">
+                    </div>
+                    <div class="info">
+                        <h3>${{item.name}}</h3>
+                    </div>
+                `;
+                grid.appendChild(card);
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    with open("kanald_library.html", "w", encoding="utf-8") as f:
+        f.write(html)
 
 if __name__ == "__main__":
-    main()
+    content_data = get_kanald_data()
+    if content_data:
+        create_html(content_data)
+        print("✨ İşlem başarılı! 'kanald_library.html' dosyasını tarayıcında açabilirsin.")
+    else:
+        print("❌ Hiç veri çekilemedi.")
