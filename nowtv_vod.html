@@ -1,87 +1,84 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <title>NOW TV VOD</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <style>
+        body { margin: 0; background: #0b0c10; color: white; font-family: sans-serif; }
+        .aramapanel { width: 100%; height: 70px; background: #1f2833; border-bottom: 2px solid #66fcf1; padding: 10px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }
+        .logo-area { font-weight: bold; color: #66fcf1; font-size: 20px; }
+        .search-area input { background: #0b0c10; border: 1px solid #45a29e; color: white; padding: 8px 15px; border-radius: 5px; outline: none; }
+        .filmpaneldis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 20px; }
+        .filmpanel { background: #1f2833; border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; border: 1px solid transparent; }
+        .filmpanel:hover { border-color: #66fcf1; transform: translateY(-5px); }
+        .filmresim img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
+        .filmisimpanel { padding: 10px; text-align: center; font-size: 14px; background: rgba(0,0,0,0.7); }
+        .hidden { display: none !important; }
+        .playerpanel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; }
+        . geri-btn { background: #45a29e; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 15px; border-radius: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="aramapanel">
+        <div class="logo-area">NOW TV VOD</div>
+        <div class="search-area"><input type="text" id="seriesSearch" placeholder="Dizi ara..." oninput="search()"></div>
+    </div>
+    <div id="diziListesiContainer" class="filmpaneldis"></div>
+    <div id="bolumContainer" class="hidden"><button class="geri-btn" onclick="geriDon()">← DİZİLERE DÖN</button><div id="bolumListesi" class="filmpaneldis"></div></div>
+    <div id="playerpanel" class="playerpanel"><button class="geri-btn" onclick="geriPlayer()">← KAPAT</button><div id="main-player" style="height: calc(100% - 80px);"></div></div>
 
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <title>NOW TV DİZİ ARŞİVİ</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        <style>
-            :root { --primary: #e50914; --bg: #141414; --card-bg: #1f1f1f; --text: #ffffff; }
-            body { background-color: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-            .header { padding: 20px 4%; background: rgba(0,0,0,0.9); position: sticky; top: 0; z-index: 1000; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
-            .logo { font-size: 28px; font-weight: bold; color: var(--primary); text-decoration: none; }
-            .search-box input { padding: 10px 20px; border-radius: 20px; border: 1px solid #444; background: #000; color: #fff; width: 250px; }
-            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 20px 4%; }
-            .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; border: 1px solid #222; }
-            .card:hover { transform: scale(1.05); border-color: var(--primary); }
-            .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-            .card-info { padding: 10px; text-align: center; font-weight: bold; font-size: 14px; }
-            .player-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: none; align-items: center; justify-content: center; }
-            .player-container { width: 90%; max-width: 1000px; position: relative; }
-            .close-btn { position: absolute; top: -40px; right: 0; color: #fff; font-size: 30px; cursor: pointer; }
-            iframe { width: 100%; height: 56.25vw; max-height: 600px; border: none; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <a href="#" class="logo">NOW TV ARŞİV</a>
-            <div class="search-box"><input type="text" id="searchInput" placeholder="Dizi ara..." onkeyup="search()"></div>
-        </div>
-        <div id="seriesGrid" class="grid"></div>
-        <div id="episodesGrid" class="grid" style="display:none;"></div>
-        <div id="playerOverlay" class="player-overlay">
-            <div class="player-container">
-                <span class="close-btn" onclick="closePlayer()">&times;</span>
-                <iframe id="videoFrame" src="" allowfullscreen></iframe>
-            </div>
-        </div>
-        <script>
-            const data = {};
-            const sGrid = document.getElementById('seriesGrid');
-            const eGrid = document.getElementById('episodesGrid');
+    <script>
+        var diziler = {"sakincali": {"isim": "Sakıncalı", "resim": "https://www.nowtv.com.tr/i/thumbnail/1823", "bolumler": [{"ad": "1. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakincali/bolumler/1/PDTSAKINCALI1HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=oY199890cSN5JXiQbNAruw&e=1769229465"}, {"ad": "2. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakincali/bolumler/2/PDTSAKINCALI2HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=ZWQMIl5wLUJWVK7z3zvtsQ&e=1769229460"}, {"ad": "3. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakincali/bolumler/3/PDTSAKINCALI3HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=IUQtDa-BDpRrOYtmnjiuIA&e=1769229468"}, {"ad": "4. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakincali/bolumler/4/PDTSAKINCALI4HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=VXQYbVKj-XRg_rHUSzjpOw&e=1769229488"}, {"ad": "5. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakincali/bolumler/5/PDTSAKINCALI5HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=GKNARvxgxkkpoBv8v7fjKg&e=1769229458"}]}, "ben-onun-annesiyim": {"isim": "Ben Onun Annesiyim", "resim": "https://www.nowtv.com.tr/i/thumbnail/1819", "bolumler": [{"ad": "1. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ben-Onun-Annesiyim/bolumler/1/PDTBENONUNANNESIYIM1HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=3BnsaA_H8bfG011q0Oe9bg&e=1769229456"}, {"ad": "2. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ben-Onun-Annesiyim/bolumler/2/PDTBENONUNANNESIYIM2HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=4HdjNAYYcfvbgmGLjP36TA&e=1769229444"}, {"ad": "3. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ben-Onun-Annesiyim/bolumler/3/PDTBENONUNANNESIYIM3HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=aiPL3Jmr-v7xoGg4xGOe0w&e=1769229453"}, {"ad": "4. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ben-Onun-Annesiyim/bolumler/4/PDTBENONUNANNESIYIM4HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=XWD-Xej0XDc0A9Q8EJeXSw&e=1769229484"}]}, "leyla-hayat-ask-adalet": {"isim": "Leyla: Hayat… Aşk… Adalet...", "resim": "https://www.nowtv.com.tr/i/thumbnail/1780", "bolumler": [{"ad": "33. Bölüm", "link": "https://nowtv-vod.ercdn.net/Leyla-Hayat-Ask-Adalet/bolumler/33/PDTLEYLA33HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=R8Q5bTW9FpRkF5akULfsNA&e=1769229456&ca=VFI"}, {"ad": "34. Bölüm", "link": "https://nowtv-vod.ercdn.net/Leyla-Hayat-Ask-Adalet/bolumler/34/PDTLEYLA34HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=7fTIpqu8JmRiUc7wnX--HA&e=1769229448&ca=VFI"}, {"ad": "35. Bölüm", "link": "https://nowtv-vod.ercdn.net/Leyla-Hayat-Ask-Adalet/bolumler/35/PDTLEYLA35HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=5fQy-qmjcgLBtvjlGeaBLQ&e=1769229445&ca=VFI"}, {"ad": "36. Bölüm", "link": "https://nowtv-vod.ercdn.net/Leyla-Hayat-Ask-Adalet/bolumler/36/PDTLEYLA36HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=mtrrOz3ALlEIWZN--B_ROg&e=1769229484&ca=VFI"}, {"ad": "37. Bölüm", "link": "https://nowtv-vod.ercdn.net/Leyla-Hayat-Ask-Adalet/bolumler/37/PDTLEYLA37HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=knSa8fp885Cb6bxDVTHxsQ&e=1769229458&ca=VFI"}]}, "hudutsuz-sevda": {"isim": "Hudutsuz Sevda", "resim": "https://www.nowtv.com.tr/i/thumbnail/1693", "bolumler": [{"ad": "59. Bölüm", "link": "https://nowtv-vod.ercdn.net/Hudutsuz-Sevda/bolumler/59/PDTHUDUTSUZSEVDA59HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=I-IZspEMmWNKEXzxNdNGNw&e=1769229452"}, {"ad": "60. Bölüm", "link": "https://nowtv-vod.ercdn.net/Hudutsuz-Sevda/bolumler/60/PDTHUDUTSUZSEVDA60HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=aTxLvUZhJ3pIBVq7DJGpgw&e=1769229736"}, {"ad": "61. Bölüm", "link": "https://nowtv-vod.ercdn.net/Hudutsuz-Sevda/bolumler/61/PDTHUDUTSUZSEVDA61HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=NAF9fGieIQn__6zvGLhvTg&e=1769229443"}, {"ad": "62. Bölüm", "link": "https://nowtv-vod.ercdn.net/Hudutsuz-Sevda/bolumler/62/PDTHUDUTSUZSEVDA62HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=SPmR_rKXWDmakTGpr7VToA&e=1769229448"}, {"ad": "63. Bölüm", "link": "https://nowtv-vod.ercdn.net/Hudutsuz-Sevda/bolumler/63/PDTHUDUTSUZSEVDA63HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=pytjIKCk7uaCbXufkYjSjQ&e=1769229455"}]}, "sakir-pasa-ailesi-mucizeler-ve-skandallar": {"isim": "Şakir Paşa Ailesi: Mucizeler ve Skandallar", "resim": "https://www.nowtv.com.tr/i/thumbnail/1786", "bolumler": [{"ad": "11. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakir-Pasa-Ailesi-Mucizeler-ve-Skandallar/bolumler/11/PDTSAKIRPASAAILESI11HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=B1-Yijew0QXYJoszi7_25A&e=1769229455"}, {"ad": "12. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakir-Pasa-Ailesi-Mucizeler-ve-Skandallar/bolumler/12/PDTSAKIRPASAAILESI12HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=7gIL-64ApWxsVq5edXz-ag&e=1769229445"}, {"ad": "13. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakir-Pasa-Ailesi-Mucizeler-ve-Skandallar/bolumler/13/PDTSAKIRPASAAILESI13HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=19WFboZWLu6syHxBMPLdvQ&e=1769229446"}, {"ad": "14. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakir-Pasa-Ailesi-Mucizeler-ve-Skandallar/bolumler/14/PDTSAKIRPASAAILESI14HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=RVKIAZGZhw0HFD-hNnD0pw&e=1769229444"}, {"ad": "15. Bölüm", "link": "https://nowtv-vod.ercdn.net/Sakir-Pasa-Ailesi-Mucizeler-ve-Skandallar/bolumler/15/PDTSAKIRPASAAILESI15HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=S58zgKIXBwxeNCFFxnEToA&e=1769229447"}]}, "kizil-goncalar": {"isim": "Kızıl Goncalar", "resim": "https://www.nowtv.com.tr/i/thumbnail/1721", "bolumler": [{"ad": "42. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kizil-Goncalar/bolumler/42/PDTKIZILGONCALAR42HDRKLMYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=NPVJDe4000KM77DU4fkSvw&e=1769229155"}, {"ad": "43. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kizil-Goncalar/bolumler/43/PDTKIZILGONCALAR43HDRKLMRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=IiFS72sd6RYJvlUQrLSJAg&e=1769229154"}, {"ad": "44. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kizil-Goncalar/bolumler/44/PDTKIZILGONCALAR44HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=jB_ongskETv5HpKYBGaR2Q&e=1769229153"}, {"ad": "45. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kizil-Goncalar/bolumler/45/PDTKIZILGONCALAR45HDRKLMRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=AbYYaHL0EE5LRka_D3SDyQ&e=1769229743"}, {"ad": "46. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kizil-Goncalar/bolumler/46/PDTKIZILGONCALAR46HDRKLMYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=RxebfhCptRx9bNrryFapFA&e=1769229500"}]}, "yabani": {"isim": "Yabani", "resim": "https://www.nowtv.com.tr/i/thumbnail/1691", "bolumler": [{"ad": "47. Bölüm", "link": "https://nowtv-vod.ercdn.net/Yabani/bolumler/47/PDTYABANI47HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=hyVx47oIHnr3reegO1W2aA&e=1769229165&ca=VFI"}, {"ad": "48. Bölüm", "link": "https://nowtv-vod.ercdn.net/Yabani/bolumler/48/PDTYABANI48HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=bsjmUd648KUwKqfooyA7Ug&e=1769229164&ca=VFI"}, {"ad": "49. Bölüm", "link": "https://nowtv-vod.ercdn.net/Yabani/bolumler/49/PDTYABANI49HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=9QXVOdr3c6qzTN-YGk4eJQ&e=1769229163&ca=VFI"}, {"ad": "50. Bölüm", "link": "https://nowtv-vod.ercdn.net/Yabani/bolumler/50/PDTYABANI50HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=fx1zkWZydHRmDkBzsyNg7g&e=1769229158&ca=VFI"}, {"ad": "51. Bölüm", "link": "https://nowtv-vod.ercdn.net/Yabani/bolumler/51/PDTYABANI51HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=iPY2CZC1Nlffzob4gceeUg&e=1769229504&ca=VFI"}]}, "ask-evlilik-bosanma": {"isim": "Aşk Evlilik Boşanma", "resim": "https://www.nowtv.com.tr/i/thumbnail/1785", "bolumler": [{"ad": "1. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ask-Evlilik-Bosanma/bolumler/1/PDTASKEVLILIKBOSANMA1HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=Tnvi3uUrL8kwK3_thlWiVw&e=1769229718"}, {"ad": "2. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ask-Evlilik-Bosanma/bolumler/2/PDTASKEVLILIKBOSANMA2HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=Xp59VWw2TzqwWvlpdANDiA&e=1769229719"}, {"ad": "3. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ask-Evlilik-Bosanma/bolumler/3/PDTASKEVLILIKBOSANMA3HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=vCwrpoPraWPkPcOfs4hlKg&e=1769229719"}, {"ad": "4. Bölüm", "link": "https://nowtv-vod.ercdn.net/Ask-Evlilik-Bosanma/bolumler/4/PDTASKEVLILIKBOSANMA4HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=ES8DqvqHq-RXoeQrToQkAw&e=1769229508"}]}, "gizli-bahce": {"isim": "Gizli Bahçe", "resim": "https://www.nowtv.com.tr/i/thumbnail/1777", "bolumler": [{"ad": "2. Bölüm", "link": "https://nowtv-vod.ercdn.net/Gizli-Bahce/bolumler/2/PDTGIZLIBAHCE2HDRTUK7YASVEUZERIOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=np6tE28-y_0Gf8MfHRk2gg&e=1769229740"}, {"ad": "3. Bölüm", "link": "https://nowtv-vod.ercdn.net/Gizli-Bahce/bolumler/3/PDTGIZLIBAHCE3HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=m6_Q7T0p3NcnROCoORBzAA&e=1769229740"}, {"ad": "4. Bölüm", "link": "https://nowtv-vod.ercdn.net/Gizli-Bahce/bolumler/4/PDTGIZLIBAHCE4HDYENIRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=NZE0CVztpovSkejmRaFkQA&e=1769229740"}, {"ad": "5. Bölüm", "link": "https://nowtv-vod.ercdn.net/Gizli-Bahce/bolumler/5/PDTGIZLIBAHCE5HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=UVF6G_M5L1k70zcZstn-Pw&e=1769229741"}, {"ad": "6. Bölüm", "link": "https://nowtv-vod.ercdn.net/Gizli-Bahce/bolumler/6/PDTGIZLIBAHCE6HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=_NjuJMy3Jqxu7GzvgqEDkQ&e=1769229505"}]}, "kirli-sepeti": {"isim": "Kirli Sepeti", "resim": "https://www.nowtv.com.tr/i/thumbnail/1694", "bolumler": [{"ad": "36. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kirli-Sepeti/bolumler/36/PDTKIRLISEPETI36HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=MlmJAy_xpLP0moSHTeZjag&e=1769229779&ca=VFI"}, {"ad": "37. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kirli-Sepeti/bolumler/37/PDTKIRLISEPETI37HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=4-MJ4tgl_pDjKTIy7lTXyg&e=1769229779&ca=VFI"}, {"ad": "38. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kirli-Sepeti/bolumler/38/PDTKIRLISEPETI38HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=vjc75SeiBVFROvuY-2oA_w&e=1769229780&ca=VFI"}, {"ad": "39. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kirli-Sepeti/bolumler/39/PDTKIRLISEPETI39HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=tNXT7tEO0fMCGVOjQLyVKw&e=1769229780&ca=VFI"}, {"ad": "40. Bölüm", "link": "https://nowtv-vod.ercdn.net/Kirli-Sepeti/bolumler/40/PDTKIRLISEPETI40HDRTUK7YASVEUZERISIDDETOLUMSUZDAVRANISLAR.smil/playlist.m3u8?st=5tJ2sTxTUD_hCcuqfWHLgA&e=1769229516&ca=VFI"}]}};
+        const BRADMAX = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
 
-            function render() {
-                sGrid.innerHTML = "";
-                for(let id in data) {
-                    sGrid.innerHTML += `<div class="card" onclick="showEpisodes('${id}')">
-                        <img src="${data[id].resim}">
-                        <div class="card-info">${data[id].isim}</div>
-                    </div>`;
-                }
-            }
+        function init() {
+            const c = document.getElementById("diziListesiContainer");
+            Object.keys(diziler).forEach(k => {
+                const item = document.createElement("div");
+                item.className = "filmpanel";
+                item.innerHTML = `<div class="filmresim"><img src="${diziler[k].resim}"></div><div class="filmisimpanel">${diziler[k].isim}</div>`;
+                item.onclick = () => {
+                    document.getElementById("diziListesiContainer").classList.add("hidden");
+                    document.getElementById("bolumContainer").classList.remove("hidden");
+                    const bl = document.getElementById("bolumListesi");
+                    bl.innerHTML = "";
+                    diziler[k].bolumler.forEach(e => {
+                        const bi = document.createElement("div");
+                        bi.className = "filmpanel";
+                        bi.innerHTML = `<div class="filmresim"><img src="${diziler[k].resim}"></div><div class="filmisimpanel">${e.ad}</div>`;
+                        bi.onclick = (event) => { event.stopPropagation(); play(e.link); };
+                        bl.appendChild(bi);
+                    });
+                };
+                c.appendChild(item);
+            });
+        }
 
-            function showEpisodes(id) {
-                sGrid.style.display = "none";
-                eGrid.style.display = "grid";
-                eGrid.innerHTML = `<div style="grid-column:1/-1"><button onclick="location.reload()" style="background:red; color:white; border:none; padding:10px; cursor:pointer">GERİ DÖN</button><h2>${data[id].isim}</h2></div>`;
-                data[id].bolumler.forEach(ep => {
-                    eGrid.innerHTML += `<div class="card" onclick="play('${ep.link}')">
-                        <img src="${ep.thumbnail || data[id].resim}">
-                        <div class="card-info">${ep.ad}</div>
-                    </div>`;
-                });
-            }
+        function play(link) {
+            document.getElementById("playerpanel").style.display = "block";
+            let url = link.includes(".m3u8") ? BRADMAX + encodeURIComponent(link) : link;
+            document.getElementById("main-player").innerHTML = `<iframe src="${url}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+        }
 
-            function play(url) {
-                document.getElementById('videoFrame').src = url;
-                document.getElementById('playerOverlay').style.display = "flex";
-            }
+        function geriDon() {
+            document.getElementById("diziListesiContainer").classList.remove("hidden");
+            document.getElementById("bolumContainer").classList.add("hidden");
+        }
 
-            function closePlayer() {
-                document.getElementById('playerOverlay').style.display = "none";
-                document.getElementById('videoFrame').src = "";
-            }
-            
-            function search() {
-                let val = document.getElementById('searchInput').value.toLowerCase();
-                document.querySelectorAll('#seriesGrid .card').forEach(card => {
-                    card.style.display = card.innerText.toLowerCase().includes(val) ? "block" : "none";
-                });
-            }
+        function geriPlayer() {
+            document.getElementById("playerpanel").style.display = "none";
+            document.getElementById("main-player").innerHTML = "";
+        }
 
-            render();
-        </script>
-    </body>
-    </html>
-    
+        function search() {
+            let v = $("#seriesSearch").val().toLowerCase();
+            $("#diziListesiContainer .filmpanel").each(function() {
+                $(this).toggle($(this).text().toLowerCase().includes(v));
+            });
+        }
+        init();
+    </script>
+</body>
+</html>
