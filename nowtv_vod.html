@@ -1,72 +1,98 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>ME TV NOW TV</title>
+    <title>ME TV NOW VOD</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <style>
-        body { margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; }
-        .aramapanel { width: 100%; height: 65px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }
-        .logo-area { font-weight: bold; color: #572aa7; font-size: 20px; }
-        .search-area input { background: #0a0e17; border: 1px solid #323442; color: white; padding: 8px 15px; border-radius: 20px; outline: none; }
-        .filmpaneldis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; padding: 20px; }
-        .filmpanel { background: #15161a; border: 1px solid #323442; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; aspect-ratio: 2/3; }
-        .filmpanel:hover { border-color: #572aa7; transform: scale(1.02); }
-        .filmresim img { width: 100%; height: 100%; object-fit: cover; }
-        .filmisimpanel { position: absolute; bottom: 0; background: rgba(0,0,0,0.8); width: 100%; padding: 8px; text-align: center; font-size: 11px; font-weight: bold; }
+        body { margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; overflow-x: hidden; }
+        .header { width: 100%; height: 65px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }
+        .logo { font-weight: bold; color: #572aa7; font-size: 22px; text-transform: uppercase; }
+        .search-box input { background: #0a0e17; border: 1px solid #323442; color: white; padding: 10px 15px; border-radius: 25px; width: 200px; outline: none; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 20px; }
+        .card { background: #15161a; border: 1px solid #323442; border-radius: 12px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }
+        .card:hover { border-color: #572aa7; transform: translateY(-5px); }
+        .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
+        .card-title { position: absolute; bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); width: 100%; padding: 10px; font-size: 12px; text-align: center; font-weight: bold; }
         .hidden { display: none !important; }
-        .playerpanel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; }
-        .geri-btn { background: #572aa7; color: white; padding: 10px 15px; border: none; cursor: pointer; margin: 10px; border-radius: 5px; }
+        .player-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; }
+        .btn { background: #572aa7; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 5px; margin: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="aramapanel">
-        <div class="logo-area">ME TV NOW</div>
-        <div class="search-area"><input type="text" id="seriesSearch" placeholder="Ara..." oninput="search()"></div>
+    <div class="header">
+        <div class="logo">ME TV NOW</div>
+        <div class="search-box"><input type="text" id="searchInput" placeholder="Dizi ara..." oninput="doSearch()"></div>
     </div>
-    <div id="listContainer" class="filmpaneldis"></div>
-    <div id="bolumContainer" class="hidden"><button class="geri-btn" onclick="backToMain()">← ANA SAYFA</button><div id="bolumListesi" class="filmpaneldis"></div></div>
-    <div id="playerpanel" class="playerpanel"><button class="geri-btn" onclick="closePlayer()">← KAPAT</button><div id="main-player" style="height: calc(100% - 80px);"></div></div>
+
+    <div id="mainGrid" class="grid"></div>
+
+    <div id="episodeGridContainer" class="hidden">
+        <button class="btn" onclick="goBack()">← ANA SAYFA</button>
+        <div id="episodeGrid" class="grid"></div>
+    </div>
+
+    <div id="playerOverlay" class="player-overlay">
+        <button class="btn" onclick="closePlayer()">✕ KAPAT</button>
+        <div id="playerContainer" style="height: calc(100% - 70px);"></div>
+    </div>
 
     <script>
-        var diziler = {};
+        const database = {};
+        const BRADMAX = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
+
         function init() {
-            const c = document.getElementById("listContainer");
-            Object.keys(diziler).forEach(k => {
-                const d = diziler[k];
-                const item = document.createElement("div");
-                item.className = "filmpanel";
-                item.innerHTML = `<div class="filmresim"><img src="${d.resim}"></div><div class="filmisimpanel">${k.toUpperCase()}</div>`;
-                item.onclick = () => showEpisodes(k);
-                c.appendChild(item);
+            const grid = document.getElementById("mainGrid");
+            Object.keys(database).forEach(id => {
+                const item = database[id];
+                const div = document.createElement("div");
+                div.className = "card";
+                div.innerHTML = `<img src="${item.resim}"><div class="card-title">${id.replace(/-/g,' ').toUpperCase()}</div>`;
+                div.onclick = () => showEpisodes(id);
+                grid.appendChild(div);
             });
         }
-        function showEpisodes(k) {
+
+        function showEpisodes(id) {
             window.scrollTo(0,0);
-            document.getElementById("listContainer").classList.add("hidden");
-            document.getElementById("bolumContainer").classList.remove("hidden");
-            const bl = document.getElementById("bolumListesi");
-            bl.innerHTML = "";
-            diziler[k].bolumler.forEach(e => {
-                const bi = document.createElement("div");
-                bi.className = "filmpanel";
-                bi.innerHTML = `<div class="filmresim"><img src="${diziler[k].resim}"></div><div class="filmisimpanel">${e.ad}</div>`;
-                bi.onclick = () => play(e.link);
-                bl.appendChild(bi);
+            document.getElementById("mainGrid").classList.add("hidden");
+            document.getElementById("episodeGridContainer").classList.remove("hidden");
+            const grid = document.getElementById("episodeGrid");
+            grid.innerHTML = "";
+            database[id].bolumler.forEach(ep => {
+                const div = document.createElement("div");
+                div.className = "card";
+                div.innerHTML = `<img src="${database[id].resim}"><div class="card-title">${ep.ad}</div>`;
+                div.onclick = () => playVideo(ep.link);
+                grid.appendChild(div);
             });
         }
-        function play(link) {
-            document.getElementById("playerpanel").style.display = "block";
-            let finalUrl = link.includes(".m3u8") ? "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=" + encodeURIComponent(link) : link;
-            document.getElementById("main-player").innerHTML = `<iframe src="${finalUrl}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+
+        function playVideo(link) {
+            const container = document.getElementById("playerContainer");
+            document.getElementById("playerOverlay").style.display = "block";
+            let finalUrl = link.includes(".m3u8") ? BRADMAX + encodeURIComponent(link) : link;
+            container.innerHTML = `<iframe src="${finalUrl}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
         }
-        function backToMain() { document.getElementById("listContainer").classList.remove("hidden"); document.getElementById("bolumContainer").classList.add("hidden"); }
-        function closePlayer() { document.getElementById("playerpanel").style.display = "none"; document.getElementById("main-player").innerHTML = ""; }
-        function search() {
-            let v = $("#seriesSearch").val().toLowerCase();
-            $(".filmpanel").each(function() { $(this).toggle($(this).text().toLowerCase().includes(v)); });
+
+        function goBack() {
+            document.getElementById("mainGrid").classList.remove("hidden");
+            document.getElementById("episodeGridContainer").classList.add("hidden");
         }
+
+        function closePlayer() {
+            document.getElementById("playerOverlay").style.display = "none";
+            document.getElementById("playerContainer").innerHTML = "";
+        }
+
+        function doSearch() {
+            let q = $("#searchInput").val().toLowerCase();
+            $(".card").each(function() {
+                $(this).toggle($(this).text().toLowerCase().includes(q));
+            });
+        }
+
         init();
     </script>
 </body>
