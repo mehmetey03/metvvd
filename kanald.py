@@ -1,97 +1,85 @@
 import cloudscraper
-from bs4 import BeautifulSoup
 import json
 import re
 
 def get_kanald_data():
-    print("🚀 Kanal D korumalı veriler çekiliyor...")
-    
-    # Cloudflare ve Bot korumalarını aşmak için scraper oluştur
+    print("🚀 Kanal D JSON Veri Madenciliği Başlatıldı...")
     scraper = cloudscraper.create_scraper()
     
-    # Taranacak ana sayfalar
     urls = [
         "https://www.kanald.com.tr/diziler",
         "https://www.kanald.com.tr/programlar"
     ]
     
-    series_list = []
+    final_data = []
 
     for url in urls:
         try:
-            print(f"🔗 {url} taranıyor...")
-            response = scraper.get(url, timeout=20)
-            if response.status_code != 200:
-                print(f"⚠️ Bağlantı sorunu: {response.status_code}")
-                continue
-
-            soup = BeautifulSoup(response.text, 'html.parser')
+            print(f"🔗 {url} kaynağından veri sızdırılıyor...")
+            response = scraper.get(url, timeout=30)
             
-            # Kanal D'nin kart yapıları: 'card', 'content-card' veya doğrudan <a> etiketleri
-            # Genellikle tüm içerikler <a> etiketleri içinde 'card' class'ına sahiptir
-            cards = soup.select('a[href*="/diziler/"], a[href*="/programlar/"]')
+            # Kanal D veriyi 'window.__PRELOADED_STATE__' değişkeninde saklıyor
+            # Bu regex ile sayfa içindeki dev JSON verisini buluyoruz
+            match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*({.*?});', response.text, re.DOTALL)
             
-            for card in cards:
-                # Başlık tespiti
-                title = card.get('title') or ""
-                if not title:
-                    img = card.find('img')
-                    title = img.get('alt') or img.get('title') if img else ""
+            if match:
+                json_raw = match.group(1)
+                data = json.loads(json_raw)
                 
-                if not title or len(title) < 3 or "Tümünü Gör" in title:
-                    continue
-
-                # Link tespiti
-                href = card.get('href')
-                full_url = "https://www.kanald.com.tr" + href if href.startswith('/') else href
+                # JSON hiyerarşisinde ilerle (Kanal D'nin güncel JSON yapısı)
+                # Not: Bu yapı site değiştikçe 'items' veya 'data' olarak güncellenebilir
+                categories = data.get('content', {}).get('data', [])
                 
-                # Resim tespiti
-                img_tag = card.find('img')
-                poster = ""
-                if img_tag:
-                    poster = img_tag.get('data-src') or img_tag.get('src') or ""
+                for item in categories:
+                    title = item.get('title') or item.get('name')
+                    path = item.get('url')
+                    img = item.get('image') or item.get('thumbnail')
+                    
+                    if title and path:
+                        final_data.append({
+                            "name": title,
+                            "url": "https://www.kanald.com.tr" + path if path.startswith('/') else path,
+                            "resim": img
+                        })
+            else:
+                print(f"⚠️ {url} içinde JSON bloğu bulunamadı, klasik yönteme geçiliyor...")
+                # Eğer JSON yoksa klasik HTML ayıklamaya dön
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.text, 'html.parser')
+                items = soup.find_all('a', href=True)
+                for i in items:
+                    href = i['href']
+                    if '/diziler/' in href or '/programlar/' in href:
+                        t = i.get('title') or i.text.strip()
+                        if len(t) > 3:
+                            final_data.append({"name": t, "url": "https://www.kanald.com.tr"+href, "resim": ""})
 
-                series_list.append({
-                    "name": title.strip(),
-                    "url": full_url,
-                    "resim": poster
-                })
         except Exception as e:
-            print(f"❌ Hata oluştu: {e}")
+            print(f"❌ Hata: {e}")
 
     # Duplikeleri temizle
-    unique_data = {s['name']: s for s in series_list}.values()
-    print(f"✅ {len(unique_data)} adet içerik toplandı.")
-    return list(unique_data)
+    unique = {s['name']: s for s in final_data if s['name']}.values()
+    print(f"✅ Sonuç: {len(unique)} içerik bulundu.")
+    return list(unique)
 
 def create_html(data):
-    json_data = json.dumps(data, ensure_ascii=False)
+    json_str = json.dumps(data, ensure_ascii=False)
     html = f"""
     <!DOCTYPE html>
     <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>Kanal D Kütüphanesi</title>
-        <style>
-            body {{ background: #0b0f19; color: white; font-family: sans-serif; padding: 20px; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }}
-            .item {{ background: #161d2f; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #232d45; transition: 0.3s; }}
-            .item:hover {{ border-color: #3a86ff; transform: translateY(-5px); }}
-            .item img {{ width: 100%; border-radius: 8px; height: 260px; object-fit: cover; margin-bottom: 10px; }}
-            a {{ color: #3a86ff; text-decoration: none; font-weight: bold; }}
-        </style>
-    </head>
-    <body>
-        <h1>📺 Kanal D Arşivi</h1>
-        <div class="grid" id="list"></div>
+    <head><meta charset="UTF-8"><title>Kanal D Arşivi</title></head>
+    <body style="background:#0b0f19; color:white; font-family:sans-serif;">
+        <h1>📺 Kanal D Kütüphanesi ({len(data)} İçerik)</h1>
+        <div id="app" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:20px;"></div>
         <script>
-            const data = {json_data};
-            const list = document.getElementById('list');
+            const data = {json_str};
+            const app = document.getElementById('app');
             data.forEach(item => {{
-                const div = document.createElement('div');
-                div.className = 'item';
-                div.innerHTML = `<img src="${{item.resim}}"><h3>${{item.name}}</h3><a href="${{item.url}}" target="_blank">DETAYLAR</a>`;
-                list.appendChild(div);
+                const card = document.createElement('div');
+                card.style = "background:#161d2f; padding:10px; border-radius:8px; text-align:center;";
+                card.innerHTML = `<img src="${{item.resim}}" style="width:100%; height:250px; object-fit:cover; border-radius:5px;">
+                                  <h4>${{item.name}}</h4><a href="${{item.url}}" target="_blank" style="color:#3a86ff;">İzle</a>`;
+                app.appendChild(card);
             }});
         </script>
     </body>
@@ -101,6 +89,5 @@ def create_html(data):
         f.write(html)
 
 if __name__ == "__main__":
-    results = get_kanald_data()
-    create_html(results)
-    print("✨ kanald_library.html oluşturuldu.")
+    d = get_kanald_data()
+    create_html(d)
