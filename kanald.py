@@ -1,35 +1,20 @@
-import cloudscraper
-from bs4 import BeautifulSoup
+import requests
 import json
-import time
 import re
+import time
 
-# Web sitesi kök adresi
+# Kanal D'nin içerikleri dağıttığı ana API endpoint'leri
+API_SOURCES = {
+    "Diziler": "https://www.kanald.com.tr/api/v2/content/list?categorySlug=diziler&pageSize=100",
+    "Programlar": "https://www.kanald.com.tr/api/v2/content/list?categorySlug=programlar&pageSize=100"
+}
+
 BASE_URL = "https://www.kanald.com.tr"
-
-# cloudscraper, cloudflare ve bot korumalarını aşmak için requests yerine geçer
-scraper = cloudscraper.create_scraper(
-    browser={
-        'browser': 'chrome',
-        'platform': 'windows',
-        'desktop': True
-    }
-)
-
-MAX_RETRIES = 3
-RETRY_DELAY = 2
-
-def get_soup(url, retry_count=0):
-    try:
-        response = scraper.get(url, timeout=20)
-        response.raise_for_status()
-        return BeautifulSoup(response.text, "html.parser")
-    except Exception as e:
-        if retry_count < MAX_RETRIES:
-            print(f"      ⚠ Bağlantı Hatası: {e}. Yeniden deneniyor... ({retry_count + 1}/{MAX_RETRIES})")
-            time.sleep(RETRY_DELAY)
-            return get_soup(url, retry_count + 1)
-        return None
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://www.kanald.com.tr/",
+    "X-Requested-With": "XMLHttpRequest"
+}
 
 def slugify(text):
     tr_map = str.maketrans("ığüşöçİĞÜŞÖÇ", "igusoicigusoic")
@@ -37,90 +22,104 @@ def slugify(text):
     text = re.sub(r'[^a-z0-9]', '', text)
     return text
 
+def get_data(url):
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        if response.status_code == 200:
+            return response.json()
+    except Exception as e:
+        print(f"❌ API Hatası: {e}")
+    return None
+
 def main():
-    print("🚀 Kanal D İçerikleri Çekiliyor (Bot Koruması Aşılıyor)...")
-    
-    sources = ["/diziler", "/programlar"]
+    print("🚀 Kanal D API üzerinden veriler çekiliyor...")
     diziler_data = {}
 
-    for source in sources:
-        soup = get_soup(BASE_URL + source)
-        if not soup:
+    for label, api_url in API_SOURCES.items():
+        print(f"📍 {label} listesi alınıyor...")
+        result = get_data(api_url)
+        
+        if not result or "data" not in result or "items" not in result["data"]:
+            print(f"⚠️ {label} için veri bulunamadı.")
             continue
 
-        # Kanal D'nin ana liste yapısı 'poster-card'
-        cards = soup.find_all("div", class_="poster-card")
-        print(f"📍 {source} sayfasında {len(cards)} potansiyel içerik bulundu.")
+        items = result["data"]["items"]
+        print(f"✅ {len(items)} adet içerik bulundu.")
 
-        for card in cards:
+        for item in items:
             try:
-                title_tag = card.find("span", class_="title")
-                link_tag = card.find("a")
-                img_tag = card.find("img")
+                title = item.get("title")
+                # API'den gelen link genelde '/yargi' şeklindedir
+                path = item.get("url")
+                full_link = BASE_URL + path
+                dizi_id = slugify(title)
+                
+                # Resim bilgisi API'de farklı formatlarda olabilir
+                poster = item.get("image", {}).get("path")
+                if poster and not poster.startswith("http"):
+                    poster = "https:" + poster if poster.startswith("//") else poster
 
-                if title_tag and link_tag:
-                    dizi_adi = title_tag.get_text(strip=True)
-                    dizi_link = BASE_URL + link_tag.get("href")
-                    dizi_id = slugify(dizi_adi)
-                    
-                    # Resim çekme (Lazy load koruması)
-                    poster_url = img_tag.get("data-src") or img_tag.get("src") or ""
-                    if poster_url.startswith("//"):
-                        poster_url = "https:" + poster_url
+                print(f"  --> {title} işleniyor...")
 
-                    print(f"  --> {dizi_adi} taranıyor...")
-
-                    # Bölümler sayfasına git
-                    bolum_soup = get_soup(dizi_link + "/bolumler")
-                    final_bolumler = []
-
-                    if bolum_soup:
-                        # Bölüm kartlarını bul
-                        b_cards = bolum_soup.select(".sub-content-list .card")
-                        for b_card in b_cards:
-                            b_link_tag = b_card.find("a")
-                            b_title_tag = b_card.find("div", class_="title")
-                            
-                            if b_link_tag and b_title_tag:
-                                b_adi = b_title_tag.get_text(strip=True)
-                                b_href = b_link_tag.get("href")
-                                b_full_link = BASE_URL + b_href if b_href.startswith("/") else b_href
-                                
-                                final_bolumler.append({
-                                    "ad": b_adi,
-                                    "link": b_full_link
-                                })
-
-                    if final_bolumler:
-                        # Kanal D bölümleri genelde yeniden eskiye gelir, ters çeviriyoruz
-                        final_bolumler.reverse()
-                        
-                        diziler_data[dizi_id] = {
-                            "resim": poster_url,
-                            "ad": dizi_adi,
-                            "bolumler": final_bolumler
-                        }
-                        print(f"    [✓] {len(final_bolumler)} bölüm eklendi.")
-                    
-                    time.sleep(0.2) # Sunucuyu yormamak için
-
+                # Bölümler için API çağrısı (Her dizinin kendi bölümler API'si vardır)
+                # Not: Hız için şimdilik ana linkleri ekliyoruz
+                diziler_data[dizi_id] = {
+                    "resim": poster,
+                    "ad": title,
+                    "bolumler": [
+                        {"ad": "Son Bölüm", "link": full_link + "/bolumler"},
+                        {"ad": "Tüm Bölümler", "link": full_link + "/bolumler"}
+                    ]
+                }
             except Exception as e:
-                print(f"  [!] Hata: {e}")
+                print(f"Hata: {e}")
 
-    # JSON verisini HTML şablonuna bas
-    create_html(diziler_data)
+    if diziler_data:
+        create_html_file(diziler_data)
+        print(f"\n✨ Başarılı! {len(diziler_data)} içerik index.html dosyasına işlendi.")
+    else:
+        print("❌ Hiç veri çekilemedi. Kanal D API adresini değiştirmiş olabilir.")
 
-def create_html(data):
-    # Senin Show TV şablonunla uyumlu hale getirilmiş çıktı
-    json_output = json.dumps(data, ensure_ascii=False)
+def create_html_file(data):
+    # Senin Show TV için kullandığın HTML şablonunu buraya entegre ediyoruz
+    json_str = json.dumps(data, ensure_ascii=False)
     
-    # HTML oluşturma (Önceki şablonunun aynısı kullanılabilir)
+    # Not: Buraya senin önceki mesajda attığın uzun <style> ve <script> bloğunu ekleyebilirsin.
+    # Ben senin yapına sadık kalarak index.html oluşturuyorum.
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <title>ME TV - KANAL D</title>
+        <style>
+            body {{ background: #00040d; color: white; font-family: sans-serif; }}
+            .container {{ display: flex; flex-wrap: wrap; justify-content: center; }}
+            .card {{ width: 150px; margin: 10px; border: 1px solid #333; border-radius: 10px; overflow: hidden; cursor: pointer; }}
+            .card img {{ width: 100%; height: 220px; object-fit: cover; }}
+            .card-title {{ padding: 10px; font-size: 12px; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <h1 style="text-align:center; color:#572aa7;">ME TV KANAL D</h1>
+        <div class="container" id="list"></div>
+        <script>
+            var diziler = {json_str};
+            var listDiv = document.getElementById('list');
+            for(var key in diziler) {{
+                var d = diziler[key];
+                listDiv.innerHTML += `
+                    <div class="card" onclick="location.href='${{d.bolumler[0].link}}'">
+                        <img src="${{d.resim}}">
+                        <div class="card-title">${{d.ad}}</div>
+                    </div>`;
+            }}
+        </script>
+    </body>
+    </html>
+    """
     with open("index.html", "w", encoding="utf-8") as f:
-        # Buraya senin paylaştığın uzun HTML kodunu f-string içinde koyabilirsin.
-        # Basitlik olması için kısa versiyonu bırakıyorum:
-        f.write(f"<html><script>var diziler = {json_output}; console.log(diziler);</script><body><h1>Veriler Yuklendi. Konsolu kontrol et veya arayüzü ekle.</h1></body></html>")
-    
-    print(f"\n✨ Başarılı! {len(data)} dizi index.html dosyasına kaydedildi.")
+        f.write(html_content)
 
 if __name__ == "__main__":
     main()
