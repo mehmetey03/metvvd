@@ -1,46 +1,35 @@
-name: NowTV Scraper
+name: NowTV Arşiv Güncelleyici
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [ "main" ]
   schedule:
-    - cron: '0 9 * * *' # Her gün Türkiye saatiyle 12:00'de otomatik çalışır
+    - cron: '0 0 * * *' # Her gece 00:00'da çalışır
+  workflow_dispatch: # Manuel çalıştırma butonu ekler
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Repo'yu checkout et
-        uses: actions/checkout@v4
+      - name: Repoyu Çek
+        uses: actions/checkout@v3
 
-      - name: Python kur
-        uses: actions/setup-python@v5
+      - name: Python Kur
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.9'
 
-      - name: Paketleri yükle
+      - name: Kütüphaneleri Yükle
         run: |
-          pip install requests beautifulsoup4 cloudscraper
+          pip install cloudscraper beautifulsoup4
 
-      - name: Now TV Scriptini Çalıştır
+      - name: Scraper'ı Çalıştır
         run: python nowtv.py
 
-      - name: Değişiklikleri Repoya Yükle
+      - name: Değişiklikleri Kaydet ve Pushla
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Sadece Now TV ile ilgili dosyaları ekle
-          git add nowtv_vod.html
-          
-          # Değişiklik varsa commit ve push yap
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "🔄 Now TV Arşivi Güncellendi: $(date +'%d.%m.%Y %H:%M')"
-            git push
-          else
-            echo "Değişiklik yok, atlanıyor."
-          fi
+          git add nowtv_data.json nowtv_vod.html
+          # Değişiklik yoksa hata vermemesi için "|| exit 0" ekledik
+          git commit -m "🔄 Otomatik Arşiv Güncellemesi: $(date +'%d-%m-%Y %H:%M')" || exit 0
+          git push
