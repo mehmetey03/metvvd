@@ -1,4 +1,4 @@
-import cloudscraper
+import requests
 from bs4 import BeautifulSoup
 import json
 import time
@@ -6,147 +6,189 @@ import re
 import os
 import subprocess
 
-BASE_URL = "https://www.kanald.com.tr"
+# Web sitesi kök adresi
+BASE_URL = "https://www.showtv.com.tr"
 
-def slugify(text):
-    mapping = {'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u','İ':'i'}
-    text = text.lower()
-    for tr, en in mapping.items(): text = text.replace(tr, en)
-    return re.sub(r'[^a-z0-9]+', '-', text).strip('-')
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+}
 
-def get_series_episodes(scraper, series_url):
-    episodes = []
-    target_url = series_url.rstrip('/') + "/bolumler"
-    try:
-        resp = scraper.get(target_url, timeout=15)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        cards = soup.select('.story-card, .content-card')
-        for card in cards:
-            link = card.find('a', href=True) or (card if card.name == 'a' else None)
-            title_tag = card.select_one('.title, h3, h2')
-            if link and title_tag:
-                episodes.append({
-                    "ad": title_tag.get_text(strip=True),
-                    "link": BASE_URL + link['href'] if link['href'].startswith('/') else link['href']
-                })
-        return episodes[:30]
-    except: return []
+MAX_RETRIES = 5  
+RETRY_DELAY = 2  
 
 def commit_and_push(file_name):
     """GitHub Actions ortamında dosyayı repoya push eder."""
-    print("\n📤 GitHub Reposuna yükleniyor...")
+    print(f"\n📤 {file_name} GitHub Reposuna yükleniyor...")
     try:
-        # Git yapılandırması
         subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-        
-        # Dosyayı ekle ve commit et
         subprocess.run(["git", "add", file_name], check=True)
         
-        # Değişiklik olup olmadığını kontrol et
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
         if status:
-            subprocess.run(["git", "commit", "-m", "🔄 Kanal D Arşivi Güncellendi"], check=True)
+            subprocess.run(["git", "commit", "-m", f"🔄 Show TV Arşivi Güncellendi: {file_name}"], check=True)
             subprocess.run(["git", "push"], check=True)
-            print("🚀 Başarıyla push edildi!")
+            print("🚀 GitHub Reponuza başarıyla yüklendi!")
         else:
-            print("ℹ️ Değişiklik yok, push atlandı.")
+            print("ℹ️ Herhangi bir değişiklik yok, push atlanıyor.")
     except Exception as e:
-        print(f"❌ Git Hatası: {e}")
+        print(f"❌ GitHub Push Hatası: {e}")
 
-def run_scraper():
-    print("🚀 Kanal D Arşiv Oluşturucu Başlatıldı...")
-    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
-    
-    series_data = {}
+def get_soup(url, retry_count=0):
     try:
-        response = scraper.get(f"{BASE_URL}/diziler", timeout=20)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        cards = soup.select('a.poster-card')
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        return BeautifulSoup(response.content, "html.parser")
+    except Exception:
+        if retry_count < MAX_RETRIES:
+            time.sleep(RETRY_DELAY)
+            return get_soup(url, retry_count + 1)
+        return None
 
-        for idx, card in enumerate(cards[:15], 1):
-            title = card.get('title') or card.find('img').get('alt', 'Dizi')
-            href = card.get('href')
-            print(f"[{idx}/15] 📺 {title} taranıyor...")
+def slugify(text):
+    text = text.lower()
+    text = text.replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+    text = re.sub(r'[^a-z0-9]', '', text)
+    return text
+
+def extract_episode_number(name):
+    match = re.search(r'(\d+)\.\s*Bölüm', name)
+    return int(match.group(1)) if match else 9999
+
+def extract_episode_number_only(name):
+    match = re.search(r'(\d+)\.\s*Bölüm', name)
+    if match: return f"{match.group(1)}. Bölüm"
+    match = re.search(r'Bölüm\s*(\d+)', name, re.IGNORECASE)
+    if match: return f"{match.group(1)}. Bölüm"
+    return name
+
+def main():
+    print("🚀 Show TV Diziler ve Bölümler taranıyor...")
+    soup = get_soup(f"{BASE_URL}/diziler")
+    if not soup: return
+
+    diziler_data = {}
+    dizi_kutulari = soup.find_all("div", attrs={"data-name": "box-type6"})
+    
+    for kutu in dizi_kutulari[:15]: # Performans için ilk 15 dizi
+        try:
+            link_tag = kutu.find("a", class_="group")
+            if not link_tag: continue
+                
+            dizi_link = BASE_URL + link_tag.get("href")
+            dizi_adi = link_tag.get("title")
+            dizi_id = slugify(dizi_adi)
             
-            full_url = BASE_URL + href if href.startswith('/') else href
-            eps = get_series_episodes(scraper, full_url)
-            
-            if eps:
-                img = card.find('img')
-                poster = img.get('data-src') or img.get('src', '')
-                series_data[slugify(title)] = {
-                    "resim": poster if poster.startswith('http') else "https:" + poster,
-                    "bolumler": eps
+            img_tag = kutu.find("img")
+            poster_url = img_tag.get("data-src") or img_tag.get("src", "")
+            if "?" in poster_url: poster_url = poster_url.split("?")[0]
+
+            print(f"📺 {dizi_adi} işleniyor...")
+
+            detail_soup = get_soup(dizi_link)
+            if not detail_soup: continue
+
+            raw_links = []
+            seen_urls = set()
+            options = detail_soup.find_all("option", attrs={"data-href": True})
+            for opt in options:
+                rel_link = opt.get("data-href")
+                if "/tum_bolumler/" in rel_link:
+                    full = BASE_URL + rel_link
+                    if full not in seen_urls:
+                        raw_links.append({"ad": opt.text.strip(), "page_url": full})
+                        seen_urls.add(full)
+
+            final_bolumler = []
+            for item in raw_links[:30]:
+                video_soup = get_soup(item["page_url"])
+                if not video_soup: continue
+                
+                video_div = video_soup.find("div", class_="hope-video")
+                if video_div and video_div.get("data-hope-video"):
+                    try:
+                        v_data = json.loads(video_div.get("data-hope-video"))
+                        media = v_data.get("media", {})
+                        video_url = ""
+                        if media.get("m3u8"): video_url = media["m3u8"][0]["src"]
+                        elif media.get("mp4"): video_url = media["mp4"][0]["src"]
+                        
+                        if video_url:
+                            video_url = video_url.replace("//ht/", "/ht/").replace("com//", "com/")
+                            final_bolumler.append({
+                                "ad": extract_episode_number_only(item["ad"]),
+                                "link": video_url,
+                                "episode_num": extract_episode_number(item["ad"])
+                            })
+                    except: pass
+
+            if final_bolumler:
+                final_bolumler = sorted(final_bolumler, key=lambda x: x['episode_num'])
+                diziler_data[dizi_id] = {
+                    "resim": poster_url,
+                    "bolumler": [{"ad": x["ad"], "link": x["link"]} for x in final_bolumler]
                 }
-                print(f"    ✅ {len(eps)} bölüm bulundu.")
-            time.sleep(0.5)
+                print(f"    ✅ {len(final_bolumler)} bölüm eklendi.")
 
-        # HTML OLUŞTURMA
-        file_name = "kanald_archive.html"
-        html_template = f"""
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>Kanal D Arşivi</title>
-            <style>
-                body {{ background: #050a12; color: white; font-family: 'Segoe UI', sans-serif; padding: 20px; }}
-                .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }}
-                .card {{ background: #111827; border: 1px solid #1f2937; border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; }}
-                .card:hover {{ transform: scale(1.05); border-color: #3b82f6; }}
-                .card img {{ width: 100%; height: 250px; object-fit: cover; }}
-                .card div {{ padding: 10px; font-size: 13px; text-align: center; font-weight: bold; }}
-                #detail {{ display: none; background: #111827; padding: 20px; border-radius: 12px; }}
-                .ep-link {{ display: block; padding: 12px; background: #1f2937; margin: 5px 0; color: #60a5fa; text-decoration: none; border-radius: 6px; }}
-                .ep-link:hover {{ background: #374151; }}
-                .back-btn {{ background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }}
-            </style>
-        </head>
-        <body>
-            <h1>Kanal D Arşiv</h1>
-            <div id="main-grid" class="grid"></div>
-            <div id="detail">
-                <button class="back-btn" onclick="location.reload()">← Geri Dön</button>
-                <h2 id="det-title"></h2>
-                <div id="ep-list"></div>
-            </div>
-            <script>
-                const data = {json.dumps(series_data, ensure_ascii=False)};
-                const grid = document.getElementById('main-grid');
-                Object.keys(data).forEach(key => {{
-                    const d = data[key];
-                    const el = document.createElement('div');
-                    el.className = 'card';
-                    el.innerHTML = `<img src="${{d.resim}}"><div>${{key.replace(/-/g,' ').toUpperCase()}}</div>`;
-                    el.onclick = () => {{
-                        document.getElementById('main-grid').style.display = 'none';
-                        document.getElementById('detail').style.display = 'block';
-                        document.getElementById('det-title').innerText = key.replace(/-/g,' ').toUpperCase();
-                        const list = document.getElementById('ep-list');
-                        list.innerHTML = '';
-                        d.bolumler.forEach(ep => {{
-                            list.innerHTML += `<a href="${{ep.link}}" class="ep-link" target="_blank">${{ep.ad}}</a>`;
-                        }});
-                    }};
-                    grid.appendChild(el);
-                }});
-            </script>
-        </body>
-        </html>
-        """
-        
-        with open(file_name, "w", encoding="utf-8") as f:
-            f.write(html_template)
-        
-        print(f"\n✨ Dosya oluşturuldu: {file_name}")
+        except Exception as e:
+            print(f"❌ Hata: {e}")
 
-        # GITHUB ACTIONS KONTROLÜ VE PUSH
-        if os.getenv('GITHUB_ACTIONS') == 'true' or os.path.exists('.git'):
-            commit_and_push(file_name)
+    create_html_file(diziler_data)
 
-    except Exception as e:
-        print(f"❌ Hata: {e}")
+def create_html_file(data):
+    file_name = "showtv.html"
+    json_str = json.dumps(data, ensure_ascii=False)
+    
+    # Senin sağladığın HTML Template'i buraya entegre edildi
+    html_template = f'''<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <title>ME TV YERLİ VOD</title>
+    <meta charset="utf-8">
+    <style>
+        /* Senin CSS kodların buraya otomatik gelecek */
+        body {{ background: #00040d; color: white; font-family: sans-serif; }}
+        .filmpanel {{ width: 150px; float: left; margin: 10px; cursor: pointer; border: 1px solid #333; }}
+        .filmresim img {{ width: 100%; }}
+        .hidden {{ display: none; }}
+    </style>
+</head>
+<body>
+    <div id="diziListesiContainer"></div>
+    <div id="bolumler" class="hidden"><button onclick="location.reload()">Geri</button><div id="bolumListesi"></div></div>
+    <script>
+        var diziler = {json_str};
+        var container = document.getElementById("diziListesiContainer");
+        Object.keys(diziler).forEach(key => {{
+            var div = document.createElement("div");
+            div.className = "filmpanel";
+            div.innerHTML = `<img src="${{diziler[key].resim}}"><p>${{key}}</p>`;
+            div.onclick = () => showBolum(key);
+            container.appendChild(div);
+        }});
+        function showBolum(key) {{
+            container.classList.add("hidden");
+            var list = document.getElementById("bolumListesi");
+            document.getElementById("bolumler").classList.remove("hidden");
+            diziler[key].bolumler.forEach(b => {{
+                var btn = document.createElement("button");
+                btn.innerText = b.ad;
+                btn.onclick = () => window.open(b.link);
+                list.appendChild(btn);
+            }});
+        }}
+    </script>
+</body>
+</html>'''
+
+    with open(file_name, "w", encoding="utf-8") as f:
+        f.write(html_template)
+    
+    print(f"\n✨ {file_name} başarıyla oluşturuldu.")
+    
+    # GITHUB PUSH KONTROLÜ
+    if os.getenv('GITHUB_ACTIONS') == 'true' or os.path.exists('.git'):
+        commit_and_push(file_name)
 
 if __name__ == "__main__":
-    run_scraper()
+    main()
