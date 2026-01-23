@@ -1,7 +1,7 @@
 name: KanalD Scraper
 
 on:
-  workflow_dispatch: # Manuel çalıştırma butonu
+  workflow_dispatch: 
   push:
     branches: [ "main" ]
 
@@ -18,16 +18,30 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Paketleri yükle
+      - name: Gerekli paketleri yükle
         run: |
-          pip install requests beautifulsoup4
+          python -m pip install --upgrade pip
+          # cloudscraper: Bot korumasını geçmek için kritik
+          # brotli: Bazı sitelerin sıkıştırma formatı için gerekli
+          pip install requests beautifulsoup4 cloudscraper brotli
 
       - name: Scripti çalıştır
         run: python kanald.py
 
+      - name: Dosya kontrolü (Debug)
+        run: |
+          if [ -f kanald_library.html ]; then
+            echo "✅ Dosya başarıyla oluşturuldu."
+            ls -lh kanald_library.html
+          else
+            echo "❌ Dosya bulunamadı! Python scripti başarısız olmuş olabilir."
+            exit 1
+          fi
+
       - name: HTML Dosyasını Artifact Olarak Yükle
+        if: always() # Hata alsa bile logları görebilmen için yükle
         uses: actions/upload-artifact@v4
         with:
           name: kanald-video-liste
           path: kanald_library.html
-          retention-days: 5 # 5 gün boyunca indirilebilir kalır
+          retention-days: 5
