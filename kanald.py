@@ -6,9 +6,10 @@ import re
 import os
 import subprocess
 
-# Web sitesi kök adresi
+# Ayarlar
 BASE_URL = "https://www.kanald.com.tr"
 ARCHIVE_URL = "https://www.kanald.com.tr/diziler/arsiv?page="
+BRADMAX_PLAYER_URL = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl="
 
 def slugify(text):
     mapping = {'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u','İ':'i'}
@@ -25,13 +26,25 @@ def commit_and_push(file_name):
         subprocess.run(["git", "add", file_name], check=True)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
         if status:
-            subprocess.run(["git", "commit", "-m", "🔄 Kanal D Tüm Arşiv Güncellendi"], check=True)
+            subprocess.run(["git", "commit", "-m", "🔄 Kanal D Arşivi Güncellendi (PHP Embed Logic)"], check=True)
             subprocess.run(["git", "push"], check=True)
-            print("🚀 GitHub Reponuza başarıyla yüklendi!")
-        else:
-            print("ℹ️ Değişiklik yok.")
+            print("🚀 GitHub'a başarıyla yüklendi!")
     except Exception as e:
         print(f"❌ Git Hatası: {e}")
+
+def get_embed_link(scraper, bolum_url):
+    """PHP kodundaki preg_match mantığı: Sayfadan gerçek embed linkini çeker"""
+    try:
+        resp = scraper.get(bolum_url, timeout=10)
+        # PHP'deki: <link itemprop="embedURL" href="..."> araması
+        match = re.search(r'<link[^>]+itemprop=["\']embedURL["\'][^>]+href=["\']([^"\']+)#i', resp.text)
+        if not match:
+            # Alternatif regex (bazı sayfalarda sıra değişebilir)
+            match = re.search(r'itemprop=["\']embedURL["\']\s+href=["\']([^"\']+)["\']', resp.text)
+        
+        return match.group(1) if match else bolum_url
+    except:
+        return bolum_url
 
 def get_series_episodes(scraper, series_url):
     episodes = []
@@ -46,41 +59,44 @@ def get_series_episodes(scraper, series_url):
             if link and title_tag:
                 href = link['href']
                 full_link = BASE_URL + href if href.startswith('/') else href
+                
+                # PHP MANTIĞI BURADA DEVREYE GİRİYOR:
+                # Sadece sayfa linkini değil, sayfanın içindeki gerçek video linkini alıyoruz
+                print(f"      🔍 Embed ID aranıyor: {title_tag.get_text(strip=True)}")
+                real_video_link = get_embed_link(scraper, full_link)
+                
                 episodes.append({
                     "ad": title_tag.get_text(strip=True),
-                    "link": full_link
+                    "link": real_video_link
                 })
-        return episodes[::-1] # Eskiden yeniye
+        return episodes[::-1]
     except: return []
 
 def run_scraper():
-    print("🚀 Kanal D Çoklu Sayfa Arşiv Tarayıcı Başlatıldı...")
+    print("🚀 Kanal D - ME TV Scraper (Full Archive + PHP Embed Logic) Başlatıldı...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
     series_data = {}
     page = 1
     
-    while True:
-        print(f"\n📄 Sayfa {page} taranıyor...")
+    while page <= 10: # Sayfa sınırı (İstersen artırabilirsin)
+        print(f"\n📄 Arşiv Sayfası {page} taranıyor...")
         try:
             response = scraper.get(f"{ARCHIVE_URL}{page}", timeout=20)
             if response.status_code != 200: break
             
             soup = BeautifulSoup(response.text, 'html.parser')
             cards = soup.select('a.poster-card')
-            
-            if not cards: 
-                print("🏁 Taranacak başka sayfa kalmadı.")
-                break
+            if not cards: break
 
             for card in cards:
                 title = card.get('title') or card.find('img').get('alt', 'Dizi')
                 href = card.get('href')
                 dizi_id = slugify(title)
                 
-                if dizi_id in series_data: continue # Zaten eklenmişse atla
+                if dizi_id in series_data: continue
 
-                print(f"  📺 {title} işleniyor...")
+                print(f"  📺 {title} taranıyor...")
                 full_url = BASE_URL + href if href.startswith('/') else href
                 eps = get_series_episodes(scraper, full_url)
                 
@@ -93,72 +109,59 @@ def run_scraper():
                         "resim": poster,
                         "bolumler": eps
                     }
-            
             page += 1
-            time.sleep(1) # Siteyi yormamak için kısa bekleme
-            
-        except Exception as e:
-            print(f"❌ Sayfa {page} hatası: {e}")
-            break
+            time.sleep(1)
+        except: break
 
-    if series_data:
-        create_html(series_data)
-    else:
-        print("❌ Hiç veri toplanamadı!")
+    create_html(series_data)
 
 def create_html(series_data):
     file_name = "kanald_vod.html"
     json_data = json.dumps(series_data, ensure_ascii=False)
     
-    # ME TV - SHOW TV TASARIMI İLE AYNI MODERN ARAYÜZ
+    # HTML TEMPLATE (Show TV Stilinde)
     html_template = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>ME TV KANAL D ARŞİV</title>
+    <title>ME TV KANAL D</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <style>
-        body {{ margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; overflow-x: hidden; }}
+        body {{ margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; }}
         .aramapanel {{ width: 100%; height: 65px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }}
         .logo-area {{ display: flex; align-items: center; font-weight: bold; font-size: 18px; color: #572aa7; }}
         .logo-area img {{ height: 40px; margin-right: 12px; }}
-        .search-area input {{ background: #0a0e17; border: 1px solid #323442; color: white; padding: 8px 15px; border-radius: 20px; outline: none; width: 200px; transition: 0.3s; }}
-        .search-area input:focus {{ border-color: #572aa7; width: 250px; }}
-        .filmpaneldis {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 25px; }}
-        .filmpanel {{ background: #15161a; border: 1px solid #323442; border-radius: 12px; overflow: hidden; cursor: pointer; transition: 0.4s; position: relative; aspect-ratio: 2/3; }}
-        .filmpanel:hover {{ border-color: #572aa7; transform: translateY(-5px); box-shadow: 0 5px 15px rgba(87, 42, 167, 0.3); }}
+        .search-area input {{ background: #0a0e17; border: 1px solid #323442; color: white; padding: 8px 15px; border-radius: 20px; outline: none; width: 180px; }}
+        .filmpaneldis {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; padding: 20px; }}
+        .filmpanel {{ background: #15161a; border: 1px solid #323442; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; aspect-ratio: 2/3; position: relative; }}
+        .filmpanel:hover {{ border-color: #572aa7; transform: translateY(-5px); }}
         .filmresim img {{ width: 100%; height: 100%; object-fit: cover; }}
-        .filmisimpanel {{ position: absolute; bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); width: 100%; padding: 15px 10px; box-sizing: border-box; }}
-        .filmisim {{ font-size: 13px; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .filmisimpanel {{ position: absolute; bottom: 0; background: linear-gradient(transparent, black); width: 100%; padding: 10px; box-sizing: border-box; }}
+        .filmisim {{ font-size: 12px; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
         .hidden {{ display: none !important; }}
         .playerpanel {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; }}
-        .geri-btn {{ background: #572aa7; color: white; padding: 10px 25px; border: none; cursor: pointer; margin: 20px; border-radius: 30px; font-weight: bold; transition: 0.3s; }}
-        .geri-btn:hover {{ background: #fff; color: #572aa7; }}
-        @media (max-width: 600px) {{ .filmpaneldis {{ grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px; }} }}
+        .geri-btn {{ background: #572aa7; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 15px; border-radius: 5px; font-weight: bold; }}
     </style>
 </head>
 <body>
     <div class="aramapanel">
         <div class="logo-area"><img src="https://i.hizliresim.com/t6e66bt.png">ME TV</div>
-        <div class="search-area"><input type="text" id="seriesSearch" placeholder="Dizi/Film Ara..." oninput="search()"></div>
+        <div class="search-area"><input type="text" id="seriesSearch" placeholder="Ara..." oninput="search()"></div>
     </div>
-
     <div id="diziListesiContainer" class="filmpaneldis"></div>
-
     <div id="bolumContainer" class="hidden">
-        <button class="geri-btn" onclick="geriDon()">← ANA SAYFA</button>
+        <button class="geri-btn" onclick="geriDon()">← GERİ DÖN</button>
         <div id="bolumListesi" class="filmpaneldis"></div>
     </div>
-
     <div id="playerpanel" class="playerpanel">
         <button class="geri-btn" onclick="geriPlayer()">← KAPAT</button>
-        <div id="main-player" style="height: calc(100% - 100px);"></div>
+        <div id="main-player" style="height: calc(100% - 80px);"></div>
     </div>
 
     <script>
         var diziler = {json_data};
-        const BRADMAX_URL = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
+        const BRADMAX_PLAYER = "{BRADMAX_PLAYER_URL}";
 
         function init() {{
             const container = document.getElementById("diziListesiContainer");
@@ -189,7 +192,9 @@ def create_html(series_data):
 
         function showPlayer(link) {{
             document.getElementById("playerpanel").style.display = "block";
-            document.getElementById("main-player").innerHTML = `<iframe src="${{BRADMAX_URL + encodeURIComponent(link)}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+            // Eğer link zaten bir embed ise direkt kullan, değilse Bradmax ile sarmala
+            let finalUrl = link.includes('bradmax') ? link : BRADMAX_PLAYER + encodeURIComponent(link);
+            document.getElementById("main-player").innerHTML = `<iframe src="${{finalUrl}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
         }}
 
         function geriDon() {{
@@ -208,7 +213,6 @@ def create_html(series_data):
                 $(this).toggle($(this).text().toLowerCase().includes(val));
             }});
         }}
-
         init();
     </script>
 </body>
@@ -217,7 +221,7 @@ def create_html(series_data):
     with open(file_name, "w", encoding="utf-8") as f:
         f.write(html_template)
     
-    print(f"\n✅ {len(series_data)} dizi ile dosya hazır: {file_name}")
+    print(f"\n✅ İşlem tamamlandı! {file_name} oluşturuldu.")
     if os.getenv('GITHUB_ACTIONS') == 'true' or os.path.exists('.git'):
         commit_and_push(file_name)
 
