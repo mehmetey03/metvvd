@@ -1,124 +1,142 @@
 import cloudscraper
 from bs4 import BeautifulSoup
 import json
+import re
 
-def get_kanald_data():
-    print("🚀 Kanal D İçerik Kartları Taranıyor...")
-    
-    # Gerçek tarayıcı taklidi
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'windows',
-            'desktop': True
-        }
-    )
-    
-    urls = [
-        "https://www.kanald.com.tr/diziler",
-        "https://www.kanald.com.tr/programlar"
+def scrape_kanald():
+    scraper = cloudscraper.create_scraper()
+    base_url = "https://www.kanald.com.tr"
+    sources = [
+        f"{base_url}/diziler",
+        f"{base_url}/programlar"
     ]
     
-    series_list = []
+    all_data = {}
 
-    for url in urls:
+    print("🚀 Kanal D İçerik Kartları Taranıyor...")
+    
+    for url in sources:
         try:
-            print(f"🔗 {url} kaynağından veriler okunuyor...")
-            response = scraper.get(url, timeout=30)
+            response = scraper.get(url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Senin paylaştığın yapı: class="poster-card" olan <a> etiketlerini bul
-            cards = soup.find_all('a', class_='poster-card')
+            # Senin bulduğun poster-card yapısı
+            cards = soup.find_all('div', class_='poster-card')
             
             for card in cards:
-                # Başlığı alt etiketinden veya href'ten al
-                img_tag = card.find('img')
-                title = ""
-                if img_tag:
-                    title = img_tag.get('alt') or img_tag.get('title')
+                title_tag = card.find('span', class_='title')
+                link_tag = card.find('a')
+                img_tag = card.find('img', class_='lazy')
                 
-                # Eğer başlık hala yoksa linkten temizle
-                if not title:
-                    title = card.get('href', '').replace('/', '').replace('-', ' ').title()
-
-                # Link
-                href = card.get('href', '')
-                full_url = "https://www.kanald.com.tr" + href if href.startswith('/') else href
-                
-                # Resim (data-src veya src)
-                poster = ""
-                if img_tag:
-                    poster = img_tag.get('data-src') or img_tag.get('src')
-
-                if title and len(title) > 2:
-                    series_list.append({
-                        "name": title.strip(),
-                        "url": full_url,
-                        "resim": poster
-                    })
+                if title_tag and link_tag:
+                    title = title_tag.get_text(strip=True)
+                    link = base_url + link_tag['href']
+                    # data-src varsa onu al, yoksa src al
+                    img = img_tag.get('data-src') if img_tag else ""
+                    if not img and img_tag:
+                        img = img_tag.get('src')
+                    
+                    # Başlığı ID'ye uygun hale getir (Küçük harf, boşluksuz)
+                    safe_id = re.sub(r'\W+', '', title.lower())
+                    
+                    all_data[safe_id] = {
+                        "resim": img,
+                        "ad": title,
+                        "bolumler": [
+                            {"ad": "Tüm Bölümler", "link": link},
+                            {"ad": "Son Bölüm", "link": link + "/bolumler"}
+                        ]
+                    }
         except Exception as e:
-            print(f"❌ Hata: {e}")
+            print(f"❌ Hata oluştu ({url}): {e}")
 
-    # Duplikeleri temizle
-    unique_data = []
-    seen = set()
-    for item in series_list:
-        if item['name'] not in seen:
-            unique_data.append(item)
-            seen.add(item['name'])
+    return all_data
 
-    print(f"✅ Toplam {len(unique_data)} adet benzersiz içerik yakalandı.")
-    return unique_data
+# Verileri çek
+diziler_data = scrape_kanald()
 
-def create_html(data):
-    json_data = json.dumps(data, ensure_ascii=False)
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Kanal D Arşivi</title>
-        <style>
-            body {{ background: #0b0f19; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }}
-            h1 {{ text-align: center; color: #3a86ff; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 2px; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }}
-            .card {{ background: #161d2f; border-radius: 12px; overflow: hidden; border: 1px solid #232d45; transition: 0.3s; text-decoration: none; color: inherit; }}
-            .card:hover {{ transform: translateY(-5px); border-color: #3a86ff; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }}
-            .img-container {{ position: relative; width: 100%; padding-top: 140%; }}
-            .img-container img {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }}
-            .info {{ padding: 15px; text-align: center; }}
-            .info h3 {{ margin: 0; font-size: 16px; height: 40px; overflow: hidden; display: flex; align-items: center; justify-content: center; }}
-        </style>
-    </head>
-    <body>
-        <h1>📺 Kanal D Arşivi ({len(data)} İçerik)</h1>
-        <div class="grid" id="main-grid"></div>
-        <script>
-            const data = {json_data};
-            const grid = document.getElementById('main-grid');
-            data.forEach(item => {{
-                const a = document.createElement('a');
-                a.className = 'card';
-                a.href = item.url;
-                a.target = '_blank';
-                a.innerHTML = `
-                    <div class="img-container">
-                        <img src="${{item.resim}}" loading="lazy">
-                    </div>
-                    <div class="info">
-                        <h3>${{item.name}}</h3>
-                    </div>
-                `;
-                grid.appendChild(a);
+# Senin HTML Şablonun
+html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <title>ME TV YERLİ VOD</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css?family=PT+Sans:700i" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://kit.fontawesome.com/bbe955c5ed.js" crossorigin="anonymous"></script>
+    <style>
+        *:not(input):not(textarea) {{ -moz-user-select: none; -webkit-user-select: none; user-select: none; }}
+        body {{ margin: 0; padding: 0; background: #00040d; font-family: sans-serif; font-size: 15px; font-style: italic; color: #fff; }}
+        .aramapanel {{ width: 100%; height: 60px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }}
+        .logo {{ display: flex; align-items: center; gap: 10px; }}
+        .logo img {{ width: 40px; height: 40px; }}
+        .filmpaneldis {{ display: flex; flex-wrap: wrap; padding: 10px; gap: 10px; justify-content: center; }}
+        .filmpanel {{ width: 140px; height: 210px; background: #15161a; border-radius: 10px; border: 1px solid #323442; overflow: hidden; position: relative; cursor: pointer; transition: 0.3s; }}
+        .filmpanel:hover {{ border: 3px solid #572aa7; transform: scale(1.05); }}
+        .filmresim img {{ width: 100%; height: 100%; object-fit: cover; }}
+        .filmisim {{ position: absolute; bottom: 0; background: rgba(0,0,0,0.7); width: 100%; padding: 5px; font-size: 12px; text-align: center; }}
+        .baslik {{ width: 100%; padding: 15px; font-size: 20px; font-weight: bold; color: #572aa7; }}
+        .hidden {{ display: none; }}
+        .bolum-liste-item {{ background: #15161a; margin: 5px; padding: 15px; border-radius: 5px; cursor: pointer; border: 1px solid #323442; text-align: center; }}
+        .bolum-liste-item:hover {{ background: #572aa7; }}
+        .geri-btn {{ background: #572aa7; color: #fff; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 10px; display: inline-block; }}
+    </style>
+</head>
+<body>
+    <div class="aramapanel">
+        <div class="logo">
+            <img src="https://i.hizliresim.com/t6e66bt.png">
+            <span>ME TV - KANAL D</span>
+        </div>
+    </div>
+
+    <div id="anaSayfa">
+        <div class="baslik">GÜNCEL İÇERİKLER ({len(diziler_data)} Adet)</div>
+        <div class="filmpaneldis" id="diziListesi"></div>
+    </div>
+
+    <div id="bolumEkrani" class="hidden">
+        <div class="geri-btn" onclick="anaSayfayaDon()">⬅ GERİ DÖN</div>
+        <div id="bolumListesi" style="padding: 20px;"></div>
+    </div>
+
+    <script>
+        var diziler = {json.dumps(diziler_data, ensure_ascii=False)};
+
+        function listele() {{
+            const container = document.getElementById('diziListesi');
+            for (let id in diziler) {{
+                const dizi = diziler[id];
+                container.innerHTML += `
+                    <div class="filmpanel" onclick="bolumleriGoster('${{id}}')">
+                        <div class="filmresim"><img src="${{dizi.resim}}"></div>
+                        <div class="filmisim">${{dizi.ad}}</div>
+                    </div>`;
+            }}
+        }}
+
+        function bolumleriGoster(id) {{
+            document.getElementById('anaSayfa').classList.add('hidden');
+            document.getElementById('bolumEkrani').classList.remove('hidden');
+            const list = document.getElementById('bolumListesi');
+            list.innerHTML = `<h2 style="color:#572aa7">${{diziler[id].ad}}</h2>`;
+            diziler[id].bolumler.forEach(b => {{
+                list.innerHTML += `<div class="bolum-liste-item" onclick="window.open('${{b.link}}', '_blank')">${{b.ad}}</div>`;
             }});
-        </script>
-    </body>
-    </html>
-    """
-    with open("kanald_library.html", "w", encoding="utf-8") as f:
-        f.write(html)
+        }}
 
-if __name__ == "__main__":
-    data = get_kanald_data()
-    create_html(data)
+        function anaSayfayaDon() {{
+            document.getElementById('anaSayfa').classList.remove('hidden');
+            document.getElementById('bolumEkrani').classList.add('hidden');
+        }}
+
+        listele();
+    </script>
+</body>
+</html>"""
+
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print(f"✅ Başarılı! {len(diziler_data)} içerik index.html dosyasına işlendi.")
