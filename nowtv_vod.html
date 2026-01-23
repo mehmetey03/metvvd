@@ -1,99 +1,105 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>ME TV NOW VOD</title>
+    <title>NOW TV Arşivi</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { margin: 0; background: #00040d; color: white; font-family: sans-serif; font-style: italic; overflow-x: hidden; }
-        .header { width: 100%; height: 65px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px 20px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }
-        .logo { font-weight: bold; color: #572aa7; font-size: 22px; text-transform: uppercase; }
-        .search-box input { background: #0a0e17; border: 1px solid #323442; color: white; padding: 10px 15px; border-radius: 25px; width: 200px; outline: none; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 20px; }
-        .card { background: #15161a; border: 1px solid #323442; border-radius: 12px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }
-        .card:hover { border-color: #572aa7; transform: translateY(-5px); }
+        :root { --primary: #e50914; --bg: #141414; --card-bg: #1f1f1f; --text: #ffffff; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
+        .header { padding: 20px 4%; background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 30px; font-weight: bold; color: var(--primary); }
+        .search-box { position: relative; width: 300px; }
+        .search-box input { width: 100%; padding: 10px 40px; border-radius: 20px; border: 1px solid #333; background: #000; color: #fff; }
+        .search-box i { position: absolute; left: 15px; top: 12px; color: #888; }
+        .container { padding: 20px 4%; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }
+        .card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card-title { position: absolute; bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); width: 100%; padding: 10px; font-size: 12px; text-align: center; font-weight: bold; }
-        .hidden { display: none !important; }
-        .player-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; }
-        .btn { background: #572aa7; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 5px; margin: 10px; font-weight: bold; }
+        .card-info { padding: 10px; font-size: 14px; font-weight: 500; text-align: center; }
+        .back-btn { background: var(--primary); color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-bottom: 20px; display: none; }
+        .player-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; justify-content: center; align-items: center; }
+        .close-player { position: absolute; top: 20px; right: 20px; font-size: 30px; cursor: pointer; }
+        iframe { width: 80%; height: 80%; border: none; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="logo">ME TV NOW</div>
-        <div class="search-box"><input type="text" id="searchInput" placeholder="Dizi ara..." oninput="doSearch()"></div>
+        <div class="logo">NOW TV</div>
+        <div class="search-box">
+            <i class="fa fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Dizi ara..." onkeyup="search()">
+        </div>
     </div>
 
-    <div id="mainGrid" class="grid"></div>
-
-    <div id="episodeGridContainer" class="hidden">
-        <button class="btn" onclick="goBack()">← ANA SAYFA</button>
-        <div id="episodeGrid" class="grid"></div>
+    <div class="container">
+        <button id="backBtn" class="back-btn" onclick="showSeries()"><i class="fa fa-arrow-left"></i> Geri Dön</button>
+        <h2 id="viewTitle">Tüm Diziler</h2>
+        <div id="mainGrid" class="grid"></div>
     </div>
 
     <div id="playerOverlay" class="player-overlay">
-        <button class="btn" onclick="closePlayer()">✕ KAPAT</button>
-        <div id="playerContainer" style="height: calc(100% - 70px);"></div>
+        <span class="close-player" onclick="closePlayer()">&times;</span>
+        <div style="color: white; text-align: center;">
+            <p>Video açılıyor, lütfen bekleyin...</p>
+            <p><small>Eğer video açılmazsa tarayıcı kısıtlaması olabilir.</small></p>
+        </div>
     </div>
 
     <script>
-        const database = {};
-        const BRADMAX = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
+        const data = {};
+        const mainGrid = document.getElementById('mainGrid');
+        const viewTitle = document.getElementById('viewTitle');
+        const backBtn = document.getElementById('backBtn');
 
-        function init() {
-            const grid = document.getElementById("mainGrid");
-            Object.keys(database).forEach(id => {
-                const item = database[id];
-                const div = document.createElement("div");
-                div.className = "card";
-                div.innerHTML = `<img src="${item.resim}"><div class="card-title">${id.replace(/-/g,' ').toUpperCase()}</div>`;
-                div.onclick = () => showEpisodes(id);
-                grid.appendChild(div);
-            });
+        function showSeries(filter = "") {
+            mainGrid.innerHTML = "";
+            viewTitle.innerText = "Tüm Diziler";
+            backBtn.style.display = "none";
+            
+            for (let id in data) {
+                if (data[id].isim.toLowerCase().includes(filter.toLowerCase())) {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.onclick = () => showEpisodes(id);
+                    card.innerHTML = `
+                        <img src="${data[id].resim}" onerror="this.src='https://via.placeholder.com/200x300?text=Resim+Yok'">
+                        <div class="card-info">${data[id].isim}</div>
+                    `;
+                    mainGrid.appendChild(card);
+                }
+            }
         }
 
         function showEpisodes(id) {
-            window.scrollTo(0,0);
-            document.getElementById("mainGrid").classList.add("hidden");
-            document.getElementById("episodeGridContainer").classList.remove("hidden");
-            const grid = document.getElementById("episodeGrid");
-            grid.innerHTML = "";
-            database[id].bolumler.forEach(ep => {
-                const div = document.createElement("div");
-                div.className = "card";
-                div.innerHTML = `<img src="${database[id].resim}"><div class="card-title">${ep.ad}</div>`;
-                div.onclick = () => playVideo(ep.link);
-                grid.appendChild(div);
+            mainGrid.innerHTML = "";
+            viewTitle.innerText = data[id].isim + " - Bölümler";
+            backBtn.style.display = "block";
+            
+            data[id].bolumler.forEach(ep => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.onclick = () => window.open(ep.link, '_blank');
+                card.innerHTML = `
+                    <img src="${ep.thumbnail || data[id].resim}" onerror="this.src='https://via.placeholder.com/200x150?text=Bolum'">
+                    <div class="card-info">${ep.ad}</div>
+                `;
+                mainGrid.appendChild(card);
             });
         }
 
-        function playVideo(link) {
-            const container = document.getElementById("playerContainer");
-            document.getElementById("playerOverlay").style.display = "block";
-            let finalUrl = link.includes(".m3u8") ? BRADMAX + encodeURIComponent(link) : link;
-            container.innerHTML = `<iframe src="${finalUrl}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
-        }
-
-        function goBack() {
-            document.getElementById("mainGrid").classList.remove("hidden");
-            document.getElementById("episodeGridContainer").classList.add("hidden");
+        function search() {
+            const val = document.getElementById('searchInput').value;
+            showSeries(val);
         }
 
         function closePlayer() {
-            document.getElementById("playerOverlay").style.display = "none";
-            document.getElementById("playerContainer").innerHTML = "";
+            document.getElementById('playerOverlay').style.display = 'none';
         }
 
-        function doSearch() {
-            let q = $("#searchInput").val().toLowerCase();
-            $(".card").each(function() {
-                $(this).toggle($(this).text().toLowerCase().includes(q));
-            });
-        }
-
-        init();
+        window.onload = () => showSeries();
     </script>
 </body>
 </html>
