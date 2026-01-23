@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import json
 import time
 import re
 
@@ -8,136 +7,129 @@ class KanalDScraper:
     def __init__(self):
         self.base_url = "https://www.kanald.com.tr"
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
         }
 
     def safe_slug(self, text):
-        """Hata veren maketrans yerine güvenli karakter dönüşümü"""
         if not text: return ""
-        mapping = {
-            'ç': 'c', 'ğ': 'g', 'ı': 'i', 'i': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u',
-            'Ç': 'C', 'Ğ': 'G', 'İ': 'I', 'I': 'i', 'Ö': 'O', 'Ş': 'S', 'Ü': 'U'
-        }
+        mapping = {'ç':'c','ğ':'g','ı':'i','i':'i','ö':'o','ş':'s','ü':'u','Ç':'C','Ğ':'G','İ':'I','Ö':'O','Ş':'S','Ü':'U'}
         for tr, en in mapping.items():
             text = text.replace(tr, en)
-        text = re.sub(r'[^a-zA-Z0-9\s-]', '', text)
-        return text.strip().lower().replace(" ", "-")
+        return re.sub(r'[^a-zA-Z0-9\s-]', '', text).strip().lower().replace(" ", "-")
 
     def get_content_list(self, category_path):
-        """Dizi veya Program listesini çeker"""
+        """Dizi veya Program listesini daha geniş seçicilerle çeker"""
         url = f"{self.base_url}{category_path}"
-        response = requests.get(url, headers=self.headers)
-        soup = BeautifulSoup(response.content, "html.parser")
-        
-        items = []
-        # Kanal D'nin kart yapısına göre seçici
-        cards = soup.select(".content-card, .story-card, .series-card")
-        
-        for card in cards:
-            link_tag = card.find("a") if card.name != "a" else card
-            if link_tag and link_tag.get("href"):
-                title = card.find("h3") or card.find("h2") or card.find(class_="title")
-                items.append({
-                    "title": title.text.strip() if title else "Adsız İçerik",
-                    "url": self.base_url + link_tag.get("href") if not link_tag.get("href").startswith("http") else link_tag.get("href")
-                })
-        return items
-
-    def get_episodes(self, content_url):
-        """İçeriğin bölümlerini ve sezonlarını tarar"""
         try:
-            # Bölümler sayfasına git
-            if not content_url.endswith("/bolumler"):
-                content_url = content_url.rstrip('/') + "/bolumler"
-            
-            response = requests.get(content_url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=10)
             soup = BeautifulSoup(response.content, "html.parser")
             
-            episodes = []
-            # Paylaştığın HTML yapısındaki swiper-slide içindeki bölümleri bulur
-            items = soup.select(".swiper-slide .story-card")
+            items = []
+            # Kanal D'nin hem arşiv hem güncel sayfa yapısındaki tüm olası linkleri tara
+            # Genelde 'card', 'item' veya 'story-card' içeren sınıflar kullanılır
+            cards = soup.find_all("a", href=True)
             
-            for item in items:
-                title_tag = item.select_one(".title")
-                time_tag = item.select_one("time")
-                img_tag = item.select_one("img")
-                
-                episodes.append({
-                    "title": title_tag.text.strip() if title_tag else "Bölüm",
-                    "duration": time_tag.text.strip() if time_tag else "N/A",
-                    "image": img_tag.get("data-src") or img_tag.get("src") if img_tag else "",
-                    "link": self.base_url + item.get("href") if item.get("href") else "#"
-                })
-            return episodes
+            seen_urls = set()
+            for a in cards:
+                href = a['href']
+                # Sadece ilgili kategoriye giden ve ana sayfaya gitmeyen linkleri al
+                if category_path in href and href != category_path:
+                    # Başlığı bul (span, h3 veya figcaption içinde olabilir)
+                    title_elem = a.find(["h3", "span", "h2", "figcaption"])
+                    title = title_elem.text.strip() if title_elem else ""
+                    
+                    full_url = self.base_url + href if href.startswith("/") else href
+                    
+                    if full_url not in seen_urls and len(title) > 2:
+                        items.append({"title": title, "url": full_url})
+                        seen_urls.add(full_url)
+            
+            return items
         except Exception as e:
-            print(f"  ⚠️ Hata: {str(e)}")
+            print(f"  ❌ Bağlantı hatası: {e}")
+            return []
+
+    def get_episodes(self, content_url):
+        """Bölüm detaylarını HTML örneğindeki sınıflara göre çeker"""
+        try:
+            target_url = content_url.rstrip('/') + "/bolumler"
+            response = requests.get(target_url, headers=self.headers, timeout=10)
+            if response.status_code != 200: # Eğer /bolumler yoksa ana sayfasına bak
+                response = requests.get(content_url, headers=self.headers, timeout=10)
+            
+            soup = BeautifulSoup(response.content, "html.parser")
+            episodes = []
+            
+            # Paylaştığın örnekteki .story-card yapısını hedefler
+            cards = soup.select(".story-card") or soup.select(".swiper-slide a")
+            
+            for card in cards:
+                title_tag = card.find(["h3", "span"], class_="title")
+                time_tag = card.find("time")
+                
+                if title_tag:
+                    episodes.append({
+                        "title": title_tag.text.strip(),
+                        "duration": time_tag.text.strip() if time_tag else "Süre Belirtilmemiş",
+                        "link": self.base_url + card['href'] if card['href'].startswith("/") else card['href']
+                    })
+            return episodes[:10] # Son 10 bölüm yeterli
+        except:
             return []
 
     def run(self):
         print("🚀 Kanal D Profesyonel Arşiv Tarayıcı Başlatıldı...")
         results = {"diziler": [], "programlar": []}
-
         categories = [("/diziler", "diziler"), ("/programlar", "programlar")]
 
         for path, key in categories:
             print(f"\n📍 {key.upper()} listesi çekiliyor...")
             items = self.get_content_list(path)
-            print(f"🔎 {len(items)} içerik bulundu. Detaylar taranıyor...")
+            
+            if not items:
+                # Eğer hala 0 bulunuyorsa alternatif yöntem: /arsiv sayfasına bak
+                print(f"  ⚠️ {path} boş döndü, arşiv taranıyor...")
+                items = self.get_content_list(path + "/arsiv")
+
+            print(f"🔎 {len(items)} içerik bulundu. Bölümler taranıyor...")
 
             for item in items:
-                print(f"  🔄 İşleniyor: {item['title']}")
+                print(f"  🔄 {item['title']} taranıyor...")
                 item['episodes'] = self.get_episodes(item['url'])
                 results[key].append(item)
-                time.sleep(0.5) # Sunucuyu yormamak için
+                time.sleep(0.3)
 
         self.save_to_html(results)
 
     def save_to_html(self, data):
-        """Sonuçları şık bir HTML dosyasına kaydeder"""
         html_content = f"""
-        <!DOCTYPE html>
-        <html lang="tr">
+        <html>
         <head>
             <meta charset="UTF-8">
-            <title>Kanal D Arşiv Listesi</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
             <style>
-                body {{ background: #f4f4f4; }}
-                .content-section {{ margin-bottom: 50px; background: white; padding: 20px; border-radius: 10px; }}
-                .episode-card {{ font-size: 0.8rem; border: 1px solid #ddd; margin-bottom: 10px; }}
-                .img-fluid {{ border-radius: 5px; }}
+                body {{ font-family: sans-serif; background: #1a1a1a; color: white; padding: 40px; }}
+                .container {{ max-width: 1000px; margin: auto; }}
+                .item-card {{ background: #2a2a2a; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 5px solid #f29400; }}
+                h2 {{ color: #f29400; border-bottom: 2px solid #333; }}
+                ul {{ font-size: 0.9em; color: #ccc; }}
+                a {{ color: #00a8ff; text-decoration: none; }}
             </style>
         </head>
-        <body class="container py-5">
-            <h1 class="text-center mb-5">Kanal D İçerik Arşivi</h1>
-            
-            {"".join([self.generate_section(k.upper(), v) for k, v in data.items()])}
-            
+        <body>
+            <div class="container">
+                <h1>Kanal D Arşiv Taraması</h1>
+                <h2>DİZİLER</h2>
+                {"".join([f"<div class='item-card'><b>{x['title']}</b> - <a href='{x['url']}'>Git</a><ul>" + "".join([f"<li>{e['title']}</li>" for e in x['episodes']]) + "</ul></div>" for x in data['diziler']])}
+                <h2>PROGRAMLAR</h2>
+                {"".join([f"<div class='item-card'><b>{x['title']}</b> - <a href='{x['url']}'>Git</a><ul>" + "".join([f"<li>{e['title']}</li>" for e in x['episodes']]) + "</ul></div>" for x in data['programlar']])}
+            </div>
         </body>
         </html>
         """
         with open("kanald_pro.html", "w", encoding="utf-8") as f:
             f.write(html_content)
-        print("\n✨ İşlem Başarılı! 'kanald_pro.html' oluşturuldu.")
-
-    def generate_section(self, title, items):
-        section_html = f"<div class='content-section'><h2>{title}</h2><div class='row'>"
-        for item in items:
-            episodes_html = "".join([f"<li>{ep['title']} ({ep['duration']})</li>" for ep in item['episodes'][:5]])
-            section_html += f"""
-            <div class='col-md-4 mb-4'>
-                <div class='card h-100'>
-                    <div class='card-body'>
-                        <h5 class='card-title'>{item['title']}</h5>
-                        <p class='text-muted'>Son Bölümler:</p>
-                        <ul>{episodes_html}</ul>
-                        <a href='{item['url']}' class='btn btn-sm btn-primary' target='_blank'>Sayfaya Git</a>
-                    </div>
-                </div>
-            </div>"""
-        section_html += "</div></div>"
-        return section_html
+        print(f"\n✨ İşlem Başarılı! {len(data['diziler']) + len(data['programlar'])} toplam içerik 'kanald_pro.html' dosyasına kaydedildi.")
 
 if __name__ == "__main__":
-    scraper = KanalDScraper()
-    scraper.run()
+    KanalDScraper().run()
