@@ -29,7 +29,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add nowtv_data.json nowtv_vod.html
+          git add nowtv_vod.html
           # Değişiklik yoksa hata vermemesi için "|| exit 0" ekledik
           git commit -m "🔄 Otomatik Arşiv Güncellemesi: $(date +'%d-%m-%Y %H:%M')" || exit 0
           git push
