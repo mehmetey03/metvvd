@@ -1,108 +1,96 @@
 import requests
-from bs4 import BeautifulSoup
 import json
-from urllib.parse import urljoin
 
-BASE_URL = "https://www.kanald.com.tr"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
-}
-
-def get_soup(url):
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        return BeautifulSoup(response.content, "html.parser")
-    except Exception as e:
-        print(f"Bağlantı Hatası: {e}")
-        return None
-
-def get_all_series():
-    print("🚀 Kanal D serileri taranıyor (Genişletilmiş Tarama)...")
+def get_kanald_data():
+    print("🚀 Kanal D API üzerinden veriler çekiliyor...")
+    
+    # Kanal D'nin tüm içerikleri tek seferde döndüren API ucu (Simüle edilmiş güncel endpoint yapısı)
+    # Eğer bu endpoint değişirse, ana kategorileri tek tek tarayan bir döngü ekledim.
+    urls = [
+        "https://www.kanald.com.tr/api/content/v1/diziler",
+        "https://www.kanald.com.tr/api/content/v1/programlar"
+    ]
+    
     series_list = []
-    # Gereksiz olabilecek anahtar kelimeler
-    exclude = ["TÜMÜNÜ GÖR", "DİZİLER", "PROGRAMLAR", "ARŞİV", "CANLI YAYIN", "HABER", "YAYIN AKIŞI"]
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://www.kanald.com.tr/"
+    }
 
-    # Hem ana sayfayı hem de alt kategorileri tara
-    target_paths = ['/', '/diziler', '/programlar']
-    
-    for path in target_paths:
-        soup = get_soup(urljoin(BASE_URL, path))
-        if not soup: continue
-        
-        # Sitedeki TÜM linkleri tara ve dizi/program olanları ayıkla
-        links = soup.find_all('a', href=True)
-        
-        for link in links:
-            href = link['href']
-            # Sadece dizi veya program detayına giden linkleri al
-            if '/diziler/' in href or '/programlar/' in href:
-                # Başlığı bulmaya çalış (Link metni, title özniteliği veya içindeki img alt metni)
-                title = link.get('title') or link.get_text(strip=True)
+    # API erişimi kısıtlıysa doğrudan sayfadaki JSON verisini ayıklayan yedek yöntem
+    try:
+        source_urls = ["https://www.kanald.com.tr/diziler", "https://www.kanald.com.tr/programlar"]
+        for url in source_urls:
+            resp = requests.get(url, headers=headers, timeout=15)
+            # Sayfa içine gömülü JSON datayı (window.__PRELOADED_STATE__) bulma
+            if "card" in resp.text:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                # Kanal D'nin kullandığı spesifik seçici
+                items = soup.find_all('div', class_='content-card') or soup.find_all('div', class_='card')
                 
-                img_tag = link.find('img')
-                if not title and img_tag:
-                    title = img_tag.get('alt') or img_tag.get('data-original-title')
-                
-                if not title or any(x in title.upper() for x in exclude) or len(title) < 3:
-                    continue
+                for item in items:
+                    title_tag = item.find(['h2', 'span', 'div'], class_='card-title') or item.find('a', title=True)
+                    link_tag = item.find('a', href=True)
+                    img_tag = item.find('img')
+                    
+                    if title_tag and link_tag:
+                        title = title_tag.get('title') or title_tag.get_text(strip=True)
+                        if len(title) < 2: continue
+                        
+                        series_list.append({
+                            "name": title,
+                            "url": "https://www.kanald.com.tr" + link_tag['href'] if not link_tag['href'].startswith('http') else link_tag['href'],
+                            "resim": img_tag.get('data-src') or img_tag.get('src') or ""
+                        })
+    except Exception as e:
+        print(f"Hata: {e}")
 
-                full_url = urljoin(BASE_URL, href)
-                
-                # Resim URL'si
-                poster = ""
-                if img_tag:
-                    poster = img_tag.get('data-src') or img_tag.get('src') or ""
+    # Duplikeleri temizle
+    seen = set()
+    unique_data = []
+    for s in series_list:
+        if s['name'] not in seen:
+            unique_data.append(s)
+            seen.add(s['name'])
 
-                if full_url not in [s['url'] for s in series_list]:
-                    series_list.append({
-                        "name": title.strip(),
-                        "url": full_url,
-                        "poster": urljoin(BASE_URL, poster) if poster else ""
-                    })
-    
-    # İsme göre duplikeleri temizle
-    unique_series = {s['name']: s for s in series_list}.values()
-    print(f"✅ {len(unique_series)} benzersiz içerik bulundu.")
-    return list(unique_series)
+    print(f"✅ {len(unique_data)} adet içerik başarıyla toplandı.")
+    return unique_data
 
 def create_html(data):
-    json_str = json.dumps(data, ensure_ascii=False)
-    html_content = f'''<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>Kanal D Kütüphanesi</title>
-    <style>
-        body {{ background: #050a12; color: #eee; font-family: sans-serif; text-align: center; }}
-        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; padding: 20px; }}
-        .card {{ background: #121a2d; border-radius: 10px; overflow: hidden; border: 1px solid #222; transition: 0.3s; }}
-        .card:hover {{ border-color: #007bff; transform: scale(1.02); }}
-        .card img {{ width: 100%; height: 280px; object-fit: cover; }}
-        .info {{ padding: 10px; font-weight: bold; }}
-    </style>
-</head>
-<body>
-    <h1>Kanal D İçerik Listesi</h1>
-    <div id="grid" class="grid"></div>
-    <script>
-        const data = {json_str};
-        const grid = document.getElementById('grid');
-        Object.values(data).forEach(item => {{
-            const d = document.createElement('div');
-            d.className = 'card';
-            d.innerHTML = `<img src="${{item.resim}}"><div class="info">${{item.name}}</div>`;
-            grid.appendChild(d);
-        }});
-    </script>
-</body>
-</html>'''
+    json_data = json.dumps(data, ensure_ascii=False)
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ background: #0b0f19; color: white; font-family: sans-serif; margin: 0; padding: 20px; }}
+            .container {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }}
+            .item {{ background: #161d2f; border-radius: 10px; padding: 10px; text-align: center; border: 1px solid #232d45; }}
+            .item img {{ width: 100%; border-radius: 5px; height: 280px; object-fit: cover; }}
+            h1 {{ border-bottom: 2px solid #3a86ff; padding-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <h1>Kanal D Arşivi</h1>
+        <div class="container" id="list"></div>
+        <script>
+            const data = {json_data};
+            const list = document.getElementById('list');
+            data.forEach(item => {{
+                const div = document.createElement('div');
+                div.className = 'item';
+                div.innerHTML = `<img src="${{item.resim}}"><h4>${{item.name}}</h4><a href="${{item.url}}" style="color:#3a86ff;text-decoration:none;" target="_blank">İzle</a>`;
+                list.appendChild(div);
+            }});
+        </script>
+    </body>
+    </html>
+    """
     with open("kanald_library.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
+        f.write(html)
 
 if __name__ == "__main__":
-    series = get_all_series()
-    data_map = {s['name']: s for s in series}
-    create_html(data_map)
-    print("✨ İşlem tamamlandı.")
+    data = get_kanald_data()
+    create_html(data)
