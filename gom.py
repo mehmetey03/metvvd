@@ -11,20 +11,22 @@ BASE_URL = "https://dizigom104.com/tum-bolumler/page/"
 FIRST_PAGE = "https://dizigom104.com/tum-bolumler/"
 M3U_FILENAME = "dizigom_arsiv.m3u"
 
+# Oturum Yönetimi ve Tarayıcı Taklidi
+session = requests.Session()
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-    "Referer": "https://dizigom104.com/"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Referer": "https://dizigom104.com/",
 }
 
 def check_link_is_active(url):
     try:
-        r = requests.head(url, headers=HEADERS, timeout=1.5, allow_redirects=True)
+        r = session.head(url, headers=HEADERS, timeout=2, allow_redirects=True)
         return r.status_code == 200
     except: return False
 
 def get_m3u8_link(embed_url):
     try:
-        r = requests.get(embed_url, headers=HEADERS, timeout=10)
+        r = session.get(embed_url, headers=HEADERS, timeout=10)
         m2 = re.search(r"eval\(function\(p,a,c,k,e,d\).*?\('(.+?)'\.split\('\|'\)", r.text, re.S)
         if not m2: return None
         parts = m2.group(1).split("|")
@@ -33,82 +35,73 @@ def get_m3u8_link(embed_url):
         letters = string.ascii_lowercase
         for char in letters:
             for num in ["1", "2"]:
-                prefix = f"{char}{num}"
-                test_url = f"https://{prefix}.df856-54hilsnz.xyz/storage/media/{video_hash}-720.mp4/gomindex.m3u8"
+                test_url = f"https://{char}{num}.df856-54hilsnz.xyz/storage/media/{video_hash}-720.mp4/gomindex.m3u8"
                 if check_link_is_active(test_url): return test_url
         return None
     except: return None
 
 def get_embed_from_episode(episode_url):
     try:
-        r = requests.get(episode_url, headers=HEADERS, timeout=10)
+        r = session.get(episode_url, headers=HEADERS, timeout=10)
         pattern = r'eval\(function\(h,u,n,t,e,r\).*?\("(.*?)",(\d+),"(.*?)",(\d+),(\d+),(\d+)\)'
         match = re.search(pattern, r.text)
         if not match: return None
-        h_data, u_val, n_data, t_val, e_val, r_val = match.groups()
-        u_val, t_val, e_val, r_val = int(u_val), int(t_val), int(e_val), int(r_val)
-        def _0xe2c(d, e, f):
+        h, u, n, t, e, _ = match.groups()
+        u, t, e = int(u), int(t), int(e)
+        def _dec(d, e, f):
             g = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/"
-            h, i = g[0:e], g[0:f]
+            h_str, i_str = g[0:e], g[0:f]
             j = 0
             for idx, char in enumerate(d[::-1]):
-                if char in h: j += h.find(char) * (e ** idx)
+                if char in h_str: j += h_str.find(char) * (e ** idx)
             k = ""
             while j > 0:
-                k = i[j % f] + k
+                k = i_str[j % f] + k
                 j = (j - (j % f)) // f
             return k or "0"
-        decoded_js = ""
-        idx_i = 0
-        while idx_i < len(h_data):
+        decoded = ""
+        idx = 0
+        while idx < len(h):
             s = ""
-            while idx_i < len(h_data) and h_data[idx_i] != n_data[e_val]:
-                s += h_data[idx_i]
-                idx_i += 1
-            for j in range(len(n_data)): s = s.replace(n_data[j], str(j))
-            if s: decoded_js += chr(int(_0xe2c(s, e_val, 10)) - t_val)
-            idx_i += 1
-        api_path_match = re.search(r'/(api/watch/.*?\.dizigom)', decoded_js)
-        if not api_path_match: return None
-        api_res = requests.get("https://dizigom104.com/" + api_path_match.group(1), headers=HEADERS)
+            while idx < len(h) and h[idx] != n[e]:
+                s += h[idx]
+                idx += 1
+            for j in range(len(n)): s = s.replace(n[j], str(j))
+            if s: decoded += chr(int(_dec(s, e, 10)) - t)
+            idx += 1
+        api_path = re.search(r'/(api/watch/.*?\.dizigom)', decoded)
+        if not api_path: return None
+        api_res = session.get("https://dizigom104.com/" + api_path.group(1), headers=HEADERS)
         final_html = base64.b64decode(api_res.text).decode('utf-8')
-        embed_match = re.search(r'src=["\'](https?://.*?)["\']', final_html)
-        return embed_match.group(1) if embed_match else None
+        embed = re.search(r'src=["\'](https?://.*?)["\']', final_html)
+        return embed.group(1) if embed else None
     except: return None
 
 def main():
-    print(f"--- DIZIGOM FULL ARSIV BOTU BAŞLATILDI ---")
+    print(f"--- DIZIGOM FULL ARSIV BOTU (v4.0) BAŞLATILDI ---")
     with open(M3U_FILENAME, "a", encoding="utf-8") as f:
         if f.tell() == 0: f.write("#EXTM3U\n")
         
         for p_idx in range(START_PAGE, END_PAGE + 1):
             url = FIRST_PAGE if p_idx == 1 else f"{BASE_URL}{p_idx}/"
-            print(f"\n[SAYFA {p_idx}] taranıyor: {url}")
+            print(f"\n[SAYFA {p_idx}] taranıyor...", end=" ", flush=True)
             
             try:
-                res = requests.get(url, headers=HEADERS, timeout=15)
-                # TÜMÜNÜ YAKALAYAN GENİŞ REGEX:
-                # Sitedeki her bir bölüm bloğunu (link, resim ve alt başlık) yakalar.
-                items = re.findall(r'<div class="bolumust">.*?href="(.*?)".*?src="(.*?)".*?alt="(.*?)"', res.text, re.S)
-                
-                # Eğer üstteki boş dönerse (Bazı sayfalarda link img'den sonra geliyor olabilir):
-                if not items:
-                    items = re.findall(r'<a href="(https://dizigom104\.com/.*?bolum/.*?)".*?title="(.*?)"', res.text, re.S)
+                res = session.get(url, headers=HEADERS, timeout=15)
+                # PAYLAŞTIĞIN HTML YAPISINA GÖRE YAKALAMA (Regex):
+                # 1. Link, 2. Resim (data-src), 3. Başlık (alt)
+                items = re.findall(r'<div class="poster">.*?<a href="(.*?)".*?data-src="(.*?)".*?alt="(.*?)"', res.text, re.S)
 
                 if not items:
-                    # Manuel Debug: Sayfada ne var?
-                    print(f"!!! Veri yakalanamadı. Kaynak kodunda 'bolumust' araması başarısız.")
+                    print("Hata: Bölüm bulunamadı!")
                     continue
 
-                for item in items:
-                    # Pattern'e göre değişkenleri ata
-                    if len(item) == 3:
-                        b_link, b_img, b_title = item
-                    else:
-                        b_link, b_title = item
-                        b_img = "" # Resim yoksa boş bırak
+                print(f"{len(items)} bölüm yakalandı.")
 
-                    b_title = b_title.replace("izle", "").replace("İzle", "").strip()
+                for b_link, b_img, b_title in items:
+                    # Başlıktaki gereksiz "izle" kelimesini temizle
+                    b_title = b_title.replace("türkçe altyazılı izle", "").replace("izle", "").strip()
+                    
                     print(f"  > {b_title}", end=" ", flush=True)
                     
                     embed = get_embed_from_episode(b_link)
@@ -124,7 +117,7 @@ def main():
                     time.sleep(0.05)
 
             except Exception as e:
-                print(f"\n[HATA] {p_idx}. sayfada: {e}")
+                print(f"Hata: {e}")
                 time.sleep(2)
 
 if __name__ == "__main__":
