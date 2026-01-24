@@ -2,51 +2,291 @@
     <!DOCTYPE html>
     <html lang="tr">
     <head>
-        <title>NOW TV VOD PLAYER</title>
-        <meta charset="utf-8">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>NOW TV - VOD</title>
         <style>
-            /* Senin verdiğin CSS stilleri buraya (Show TV tarzı) */
-            body { background: #00040d; color: white; font-family: sans-serif; }
-            .filmpanel { width: 180px; height: 260px; background: #15161a; float: left; margin: 10px; border-radius: 10px; overflow: hidden; cursor: pointer; border: 1px solid #323442; transition: 0.3s; }
-            .filmpanel:hover { border-color: #572aa7; transform: scale(1.05); }
-            .filmresim img { width: 100%; height: 200px; object-fit: cover; }
-            .filmisim { padding: 10px; font-size: 13px; text-align: center; }
-            #player-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; }
-            iframe { width: 100%; height: 100%; border: none; }
-            .close-btn { position: absolute; top: 20px; right: 20px; background: red; color: white; padding: 10px; cursor: pointer; z-index: 10001; }
+            body { background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+            .header { border-left: 5px solid #ff0044; padding-left: 15px; margin-bottom: 30px; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+            .movie-card { background: #1a1a1a; border-radius: 10px; overflow: hidden; transition: 0.3s; cursor: pointer; border: 1px solid #333; }
+            .movie-card:hover { transform: scale(1.05); border-color: #ff0044; box-shadow: 0 0 15px rgba(255, 0, 68, 0.4); }
+            .movie-card img { width: 100%; height: 280px; object-fit: cover; }
+            .movie-info { padding: 12px; text-align: center; }
+            .movie-title { font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         </style>
     </head>
     <body>
-        <div id="main-container"></div>
-        <div id="player-modal">
-            <div class="close-btn" onclick="closePlayer()">KAPAT</div>
-            <div id="player-frame"></div>
+        <div class="header"><h1>NOW TV ARŞİV</h1></div>
+        <div class="grid">
+    
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Sakincali/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1823" alt="Sakıncalı">
+                <div class="movie-info">
+                    <div class="movie-title">Sakıncalı</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Ben-Onun-Annesiyim/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1819" alt="Ben Onun Annesiyim">
+                <div class="movie-info">
+                    <div class="movie-title">Ben Onun Annesiyim</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Leyla-Hayat-Ask-Adalet/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1780" alt="Leyla: Hayat… Aşk… Adalet...">
+                <div class="movie-info">
+                    <div class="movie-title">Leyla: Hayat… Aşk… Adalet...</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Hudutsuz-Sevda/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1693" alt="Hudutsuz Sevda">
+                <div class="movie-info">
+                    <div class="movie-title">Hudutsuz Sevda</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Sakir-Pasa-Ailesi-Mucizeler-ve-Skandallar/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1786" alt="Şakir Paşa Ailesi: Mucizeler ve Skandallar">
+                <div class="movie-info">
+                    <div class="movie-title">Şakir Paşa Ailesi: Mucizeler ve Skandallar</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kizil-Goncalar/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1721" alt="Kızıl Goncalar">
+                <div class="movie-info">
+                    <div class="movie-title">Kızıl Goncalar</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Yabani/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1691" alt="Yabani">
+                <div class="movie-info">
+                    <div class="movie-title">Yabani</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Ask-Evlilik-Bosanma/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1785" alt="Aşk Evlilik Boşanma">
+                <div class="movie-info">
+                    <div class="movie-title">Aşk Evlilik Boşanma</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Gizli-Bahce/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1777" alt="Gizli Bahçe">
+                <div class="movie-info">
+                    <div class="movie-title">Gizli Bahçe</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kirli-Sepeti/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1694" alt="Kirli Sepeti">
+                <div class="movie-info">
+                    <div class="movie-title">Kirli Sepeti</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kotu-Kan/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1759" alt="Kötü Kan">
+                <div class="movie-info">
+                    <div class="movie-title">Kötü Kan</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Gaddar/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1719" alt="Gaddar">
+                <div class="movie-info">
+                    <div class="movie-title">Gaddar</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Sahane-Hayatim/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1708" alt="Şahane Hayatım">
+                <div class="movie-info">
+                    <div class="movie-title">Şahane Hayatım</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Korkma-Ben-Yanindayim/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1731" alt="Korkma Ben Yanındayım">
+                <div class="movie-info">
+                    <div class="movie-title">Korkma Ben Yanındayım</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kopuk/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1723" alt="Kopuk">
+                <div class="movie-info">
+                    <div class="movie-title">Kopuk</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Bambaska-Biri/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1698" alt="Bambaşka Biri">
+                <div class="movie-info">
+                    <div class="movie-title">Bambaşka Biri</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Adim-Farah/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1661" alt="Adım Farah">
+                <div class="movie-info">
+                    <div class="movie-title">Adım Farah</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kader-Baglari/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1692" alt="Kader Bağları">
+                <div class="movie-info">
+                    <div class="movie-title">Kader Bağları</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Ruhun-Duymaz/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1686" alt="Ruhun Duymaz">
+                <div class="movie-info">
+                    <div class="movie-title">Ruhun Duymaz</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Yaz-Sarkisi/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1682" alt="Yaz Şarkısı">
+                <div class="movie-info">
+                    <div class="movie-title">Yaz Şarkısı</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kismet/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1680" alt="Kısmet">
+                <div class="movie-info">
+                    <div class="movie-title">Kısmet</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Gulcemal/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1666" alt="Gülcemal">
+                <div class="movie-info">
+                    <div class="movie-title">Gülcemal</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Tacsiz-Prenses/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1656" alt="Taçsız Prenses">
+                <div class="movie-info">
+                    <div class="movie-title">Taçsız Prenses</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Yalniz-Kalpler/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1660" alt="Yalnız Kalpler">
+                <div class="movie-info">
+                    <div class="movie-title">Yalnız Kalpler</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Tetikcinin-Oglu/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1665" alt="Tetikçinin Oğlu">
+                <div class="movie-info">
+                    <div class="movie-title">Tetikçinin Oğlu</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Yasak-Elma/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1324" alt="Yasak Elma">
+                <div class="movie-info">
+                    <div class="movie-title">Yasak Elma</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/EGO/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1657" alt="EGO">
+                <div class="movie-info">
+                    <div class="movie-title">EGO</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Dokuz-Oguz/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1658" alt="Dokuz Oğuz">
+                <div class="movie-info">
+                    <div class="movie-title">Dokuz Oğuz</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Hayatimin-Sansi/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1654" alt="Hayatımın Şansı">
+                <div class="movie-info">
+                    <div class="movie-title">Hayatımın Şansı</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Iyilik/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1632" alt="İyilik">
+                <div class="movie-info">
+                    <div class="movie-title">İyilik</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Bir-Peri-Masali/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1649" alt="Bir Peri Masalı">
+                <div class="movie-info">
+                    <div class="movie-title">Bir Peri Masalı</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Tozluyaka/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1639" alt="Tozluyaka">
+                <div class="movie-info">
+                    <div class="movie-title">Tozluyaka</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Darmaduman/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1651" alt="Darmaduman">
+                <div class="movie-info">
+                    <div class="movie-title">Darmaduman</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Mahkum/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1615" alt="Mahkum">
+                <div class="movie-info">
+                    <div class="movie-title">Mahkum</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Kusursuz-Kiraci/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1646" alt="Kusursuz Kiracı">
+                <div class="movie-info">
+                    <div class="movie-title">Kusursuz Kiracı</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Senden-Daha-Guzel/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1634" alt="Senden Daha Güzel">
+                <div class="movie-info">
+                    <div class="movie-title">Senden Daha Güzel</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Gizli-Sakli/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1635" alt="Gizli Saklı">
+                <div class="movie-info">
+                    <div class="movie-title">Gizli Saklı</div>
+                </div>
+            </div>
+        
+            <div class="movie-card" onclick="window.location.href='https://www.nowtv.com.tr/Evlilik-Hakkinda-Her-Sey/izle'">
+                <img src="https://www.nowtv.com.tr/i/thumbnail/1610" alt="Evlilik Hakkında Her Şey">
+                <div class="movie-info">
+                    <div class="movie-title">Evlilik Hakkında Her Şey</div>
+                </div>
+            </div>
+        
         </div>
-
-        <script>
-            const data = {};
-            const container = document.getElementById('main-container');
-
-            Object.keys(data).forEach(slug => {
-                const item = data[slug];
-                const div = document.createElement('div');
-                div.className = 'filmpanel';
-                div.innerHTML = `<div class="filmresim"><img src="${item.resim}"></div><div class="filmisim">${item.isim}</div>`;
-                div.onclick = () => openPlayer(item.bolumler[0].link);
-                container.appendChild(div);
-            });
-
-            function openPlayer(url) {
-                document.getElementById('player-modal').style.display = 'block';
-                // Bradmax veya HLS Player entegrasyonu
-                document.getElementById('player-frame').innerHTML = `<iframe src="https://bradmax.com/client/embed-player/YOUR_ID?mediaUrl=${url}"></iframe>`;
-            }
-
-            function closePlayer() {
-                document.getElementById('player-modal').style.display = 'none';
-                document.getElementById('player-frame').innerHTML = '';
-            }
-        </script>
     </body>
     </html>
     
