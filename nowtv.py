@@ -1,136 +1,204 @@
+import cloudscraper
+from bs4 import BeautifulSoup
 import json
-import os
+import time
+import re
+import subprocess
 
-def create_now_vod_html():
-    # 1. JSON Verisini Oku
-    json_file = 'nowtv_data.json'
-    if not os.path.exists(json_file):
-        print(f"❌ {json_file} bulunamadı! Lütfen önce json dosyanızı oluşturun.")
+# Ayarlar
+JSON_SOURCE_URL = "https://raw.githubusercontent.com/mehmetey03/metvvd/refs/heads/main/nowtv_data.json"
+BASE_URL = "https://www.nowtv.com.tr"
+BRADMAX_PLAYER = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl="
+
+def slugify(text):
+    mapping = {'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u','İ':'i','I':'i'}
+    text = text.lower()
+    for tr, en in mapping.items(): text = text.replace(tr, en)
+    return re.sub(r'[^a-z0-9]+', '-', text).strip('-')
+
+def get_now_m3u8(scraper, bolum_url):
+    try:
+        time.sleep(0.3) # Engellenmemek için kısa bekleme
+        r = scraper.get(bolum_url, timeout=10)
+        # Video linkini sayfa kaynağından regex ile çek
+        m3u8_match = re.search(r'(https?://[^\s"\']+\.m3u8[^\s"\']*)', r.text)
+        if m3u8_match:
+            return m3u8_match.group(0).replace('\\/', '/')
+        return bolum_url
+    except:
+        return bolum_url
+
+def commit_and_push(file_name):
+    print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
+    try:
+        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+        subprocess.run(["git", "add", file_name], check=True)
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
+        if status:
+            subprocess.run(["git", "commit", "-m", "🔄 NOW TV VOD Updated from JSON Source"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print("🚀 GitHub'a başarıyla yüklendi!")
+    except Exception as e:
+        print(f"❌ Git Hatası: {e}")
+
+def run_scraper():
+    print("🚀 Bot Başlatıldı. Kaynak JSON okunuyor...")
+    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+    
+    try:
+        # GitHub'daki ana listeyi çek
+        source_resp = scraper.get(JSON_SOURCE_URL)
+        target_series = json.loads(source_resp.text)
+    except Exception as e:
+        print(f"❌ JSON okuma hatası: {e}")
         return
 
-    with open(json_file, 'r', encoding='utf-8') as f:
-        diziler_data = json.load(f)
+    memory_data = {}
 
-    # JSON verisini HTML içine gömmek için string'e çevir
-    json_str = json.dumps(diziler_data, ensure_ascii=False)
+    for dizi_key, info in target_series.items():
+        title = info['isim']
+        dizi_url = info['link']
+        poster = info['resim']
+        
+        # /izle kısmını /bolumler ile değiştirerek bölüm listesine ulaş
+        bolumler_url = dizi_url.split('/izle')[0].rstrip('/') + "/bolumler"
+        
+        print(f"📺 {title} taranıyor -> {bolumler_url}")
+        
+        try:
+            b_resp = scraper.get(bolumler_url, timeout=15)
+            b_soup = BeautifulSoup(b_resp.text, 'html.parser')
+            
+            # NOW TV'nin bölüm kartlarını bul (hem slider hem liste için)
+            b_cards = b_soup.find_all('div', class_=re.compile(r'list-item|video-card|episode-item'))
+            
+            eps = []
+            for bc in b_cards:
+                b_link_tag = bc.find('a', href=True)
+                if b_link_tag and "/bolum/" in b_link_tag['href']:
+                    full_b_url = BASE_URL + b_link_tag['href'] if b_link_tag['href'].startswith('/') else b_link_tag['href']
+                    
+                    b_title_tag = bc.select_one('.program-name, .title, .content-title')
+                    b_title = b_title_tag.get_text(strip=True) if b_title_tag else "Bölüm"
+                    
+                    # M3U8 linkini çek
+                    m3u8 = get_now_m3u8(scraper, full_b_url)
+                    
+                    if not any(e['link'] == m3u8 for e in eps):
+                        eps.append({"ad": b_title, "link": m3u8})
+                        print(f"   🔗 Bölüm Bulundu: {b_title[:40]}")
 
-    # 2. HTML Şablonu (Senin verdiğin ME TV Tasarımı)
+            if eps:
+                memory_data[dizi_key] = {
+                    "isim": title,
+                    "resim": poster,
+                    "bolumler": eps
+                }
+        except Exception as e:
+            print(f"   ⚠️ {title} bölümleri çekilemedi: {e}")
+
+    create_html(memory_data)
+
+def create_html(series_data):
+    file_name = "nowtv_vod.html"
+    json_embedded = json.dumps(series_data, ensure_ascii=False)
+    
     html_template = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
-    <title>ME TV NOW VOD</title>
+    <title>NOW VOD PLAYER</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css?family=PT+Sans:700i" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://kit.fontawesome.com/bbe955c5ed.js" crossorigin="anonymous"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        *:not(input):not(textarea) {{ -webkit-user-select: none; user-select: none; }}
-        body {{ margin: 0; background: #00040d; font-family: sans-serif; color: #fff; overflow-x: hidden; font-style: italic; }}
-        .aramapanel {{ width: 100%; height: 60px; background: #15161a; border-bottom: 1px solid #323442; padding: 10px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }}
-        .logo-section {{ display: flex; align-items: center; }}
-        .logo {{ width: 40px; height: 40px; margin-right: 10px; }}
-        .logo img {{ width: 100%; }}
-        .logoisim {{ font-size: 18px; font-weight: bold; color: #572aa7; }}
-        
-        .aramapanelyazi {{ height: 35px; width: 180px; border: 1px solid #323442; background: #000; color: #fff; padding: 0 10px; border-radius: 5px; }}
-        .aramapanelbuton {{ height: 35px; background: #572aa7; border: none; color: #fff; padding: 0 15px; cursor: pointer; border-radius: 5px; }}
-
-        .baslik {{ padding: 20px; font-size: 20px; border-left: 5px solid #572aa7; margin: 20px; background: #15161a; }}
-        
-        .filmpaneldis {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; padding: 20px; }}
-        .filmpanel {{ background: #15161a; border: 1px solid #323442; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; height: 250px; }}
-        .filmpanel:hover {{ border-color: #572aa7; transform: scale(1.05); box-shadow: 0 0 15px rgba(87, 42, 167, 0.5); }}
-        
-        .filmresim {{ width: 100%; height: 100%; }}
-        .filmresim img {{ width: 100%; height: 100%; object-fit: cover; }}
-        
-        .filmisimpanel {{ position: absolute; bottom: 0; width: 100%; background: linear-gradient(transparent, black); padding: 20px 5px 5px 5px; box-sizing: border-box; }}
-        .filmisim {{ font-size: 13px; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-
-        /* Player Bölümü */
-        .playerpanel {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: none; }}
-        .player-geri-btn {{ position: absolute; top: 20px; left: 20px; background: #572aa7; color: #fff; padding: 10px 20px; border-radius: 5px; cursor: pointer; z-index: 10001; }}
-        iframe {{ width: 100%; height: 100%; border: none; }}
-
-        @media(max-width: 600px) {{
-            .filmpaneldis {{ grid-template-columns: repeat(3, 1fr); padding: 10px; gap: 10px; }}
-            .filmpanel {{ height: 180px; }}
-        }}
+        body {{ margin: 0; background: #080808; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; }}
+        .navbar {{ background: #000; padding: 15px 30px; border-bottom: 2px solid #f50057; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 30px; }}
+        .card {{ background: #121212; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; border: 1px solid #222; }}
+        .card:hover {{ transform: scale(1.05); border-color: #f50057; box-shadow: 0 0 15px rgba(245, 0, 87, 0.3); }}
+        .card img {{ width: 100%; aspect-ratio: 2/3; object-fit: cover; }}
+        .card-name {{ padding: 10px; text-align: center; font-size: 14px; font-weight: bold; }}
+        .player-view {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; }}
+        .btn {{ background: #f50057; color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 10px; }}
+        .hidden {{ display: none !important; }}
     </style>
 </head>
 <body>
-    <div class="aramapanel">
-        <div class="logo-section">
-            <div class="logo"><img src="https://i.hizliresim.com/t6e66bt.png"></div>
-            <div class="logoisim">ME TV NOW</div>
-        </div>
-        <div>
-            <input type="text" id="search" placeholder="Dizi Ara..." class="aramapanelyazi" oninput="doSearch()">
-        </div>
+    <div class="navbar">
+        <div style="font-size: 24px; font-weight: bold; color: #f50057;">METV NOW VOD</div>
+        <input type="text" id="searchInput" placeholder="Dizi ara..." oninput="search()" style="padding: 8px; border-radius: 20px; border: none; width: 200px;">
     </div>
-
-    <div class="baslik">NOW TV DİZİ ARŞİVİ</div>
     
-    <div class="filmpaneldis" id="mainGrid"></div>
-
-    <div id="playerpanel" class="playerpanel">
-        <div class="player-geri-btn" onclick="closePlayer()">GERİ DÖN</div>
-        <div id="videoContainer" style="width:100%; height:100%;"></div>
+    <div id="mainGrid" class="grid"></div>
+    <div id="episodeGrid" class="grid hidden"></div>
+    
+    <div id="playerView" class="player-view">
+        <button class="btn" onclick="closePlayer()">✕ KAPAT</button>
+        <div id="videoContainer" style="height: calc(100% - 70px);"></div>
     </div>
 
     <script>
-        var diziler = {json_str};
-        var mainGrid = document.getElementById("mainGrid");
+        const seriesData = {json_embedded};
+        const BRADMAX = "{BRADMAX_PLAYER}";
 
-        // Listeleme
-        function renderList(filter = "") {{
-            mainGrid.innerHTML = "";
-            Object.keys(diziler).forEach(key => {{
-                let dizi = diziler[key];
-                if(dizi.isim.toLowerCase().includes(filter.toLowerCase())) {{
-                    let item = document.createElement("div");
-                    item.className = "filmpanel";
-                    item.onclick = () => openPlayer(dizi.link);
-                    item.innerHTML = `
-                        <div class="filmresim"><img src="${{dizi.resim}}"></div>
-                        <div class="filmisimpanel">
-                            <div class="filmisim">${{dizi.isim}}</div>
-                        </div>
-                    `;
-                    mainGrid.appendChild(item);
-                }}
+        function init() {{
+            const grid = document.getElementById("mainGrid");
+            Object.keys(seriesData).forEach(id => {{
+                const d = seriesData[id];
+                const card = document.createElement("div");
+                card.className = "card";
+                card.innerHTML = `<img src="${{d.resim}}"><div class="card-name">${{d.isim}}</div>`;
+                card.onclick = () => showEpisodes(id);
+                grid.appendChild(card);
             }});
         }}
 
-        // Arama
-        function doSearch() {{
-            renderList(document.getElementById("search").value);
+        function showEpisodes(id) {{
+            window.scrollTo(0,0);
+            document.getElementById("mainGrid").classList.add("hidden");
+            const eg = document.getElementById("episodeGrid");
+            eg.classList.remove("hidden");
+            eg.innerHTML = `<div style="grid-column: 1/-1;"><button class="btn" onclick="goBack()">← DİZİLER</button><h2 style="display:inline; margin-left:20px;">${{seriesData[id].isim}}</h2></div>`;
+            
+            seriesData[id].bolumler.forEach(ep => {{
+                const card = document.createElement("div");
+                card.className = "card";
+                card.innerHTML = `<img src="${{seriesData[id].resim}}"><div class="card-name">${{ep.ad}}</div>`;
+                card.onclick = () => playVideo(ep.link);
+                eg.appendChild(card);
+            }});
         }}
 
-        // Player Aç (Bradmax üzerinden linki oynatır)
-        function openPlayer(url) {{
-            const bradmaxUrl = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
-            document.getElementById("playerpanel").style.display = "block";
-            document.getElementById("videoContainer").innerHTML = `<iframe src="${{bradmaxUrl + encodeURIComponent(url)}}&autoplay=true" allowfullscreen></iframe>`;
+        function playVideo(link) {{
+            document.getElementById("playerView").style.display = "block";
+            let u = link.includes(".m3u8") ? BRADMAX + encodeURIComponent(link) : link;
+            document.getElementById("videoContainer").innerHTML = `<iframe src="${{u}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
         }}
 
         function closePlayer() {{
-            document.getElementById("playerpanel").style.display = "none";
+            document.getElementById("playerView").style.display = "none";
             document.getElementById("videoContainer").innerHTML = "";
         }}
 
-        renderList();
+        function goBack() {{
+            document.getElementById("episodeGrid").classList.add("hidden");
+            document.getElementById("mainGrid").classList.remove("hidden");
+        }}
+
+        function search() {{
+            let q = document.getElementById("searchInput").value.toLowerCase();
+            document.querySelectorAll(".card").forEach(c => {{
+                c.style.display = c.innerText.toLowerCase().includes(q) ? "" : "none";
+            }});
+        }}
+        init();
     </script>
 </body>
-</html>
-'''
-    # 3. HTML'i Kaydet
-    with open("nowtv_me_vod.html", "w", encoding="utf-8") as f:
+</html>'''
+
+    with open(file_name, "w", encoding="utf-8") as f:
         f.write(html_template)
-    
-    print(f"✅ İşlem Tamam! {len(diziler_data)} dizi ME TV arayüzüne aktarıldı.")
-    print("🚀 'nowtv_me_vod.html' dosyasını tarayıcıda açabilirsiniz.")
+    commit_and_push(file_name)
 
 if __name__ == "__main__":
-    create_now_vod_html()
+    run_scraper()
