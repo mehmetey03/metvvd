@@ -4,40 +4,40 @@ import json
 import time
 import re
 import subprocess
-import os
 
 # --- AYARLAR ---
 JSON_SOURCE_URL = "https://raw.githubusercontent.com/mehmetey03/metvvd/refs/heads/main/nowtv_data.json"
 BASE_URL = "https://www.nowtv.com.tr"
 BRADMAX_PLAYER = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl="
 
+def get_single_m3u8(scraper, url):
+    """Eksik kalan tekil sayfalardan m3u8 çeker."""
+    try:
+        time.sleep(0.3)
+        r = scraper.get(url, timeout=10)
+        match = re.search(r'https?://[^\s"\'\\,]+\.m3u8[^\s"\'\\,]*', r.text)
+        if match:
+            return match.group(0).replace('\\/', '/')
+        return url
+    except:
+        return url
+
 def commit_and_push(file_name):
     print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
     try:
-        # Git Ayarları
         subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-        
-        # Değişiklikleri ekle
         subprocess.run(["git", "add", "."], check=True)
-        
-        # Değişiklik var mı kontrol et
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
-        if not status:
-            print("ℹ️ Hiçbir değişiklik yok, push atlanıyor.")
-            return
-
-        # Commit ve Push (Force push kullanarak hataları bypass ediyoruz)
-        subprocess.run(["git", "commit", "-m", "🔄 NOW TV VOD: M3U8 & Auto-Update"], check=True)
-        # Mevcut branch ismini otomatik bul ve zorla pushla
-        subprocess.run(["git", "push", "--force"], check=True)
-        print("🚀 GitHub'a başarıyla yüklendi!")
+        if status:
+            subprocess.run(["git", "commit", "-m", "🔄 NOW TV VOD: Full M3U8 Integration"], check=True)
+            subprocess.run(["git", "push", "--force"], check=True)
+            print("🚀 GitHub'a başarıyla yüklendi!")
     except Exception as e:
-        print(f"❌ Git Hatası (Muhtemelen yetki sorunu): {e}")
-        print("💡 İpucu: GitHub Repo Ayarları > Actions > General > 'Workflow permissions' kısmını 'Read and write' yapmalısın.")
+        print(f"❌ Git Hatası: {e}")
 
 def run_scraper():
-    print("🚀 Bot Başlatıldı. Toplu M3U8 taraması yapılıyor...")
+    print("🚀 Bot Başlatıldı. Derinlemesine M3U8 taraması yapılıyor...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
     try:
@@ -55,14 +55,14 @@ def run_scraper():
         poster = info.get('resim', '')
         
         bolumler_url = dizi_url.split('/izle')[0].rstrip('/') + "/bolumler"
-        print(f"🔍 {title} taranıyor...", end=" ", flush=True)
+        print(f"🔍 {title} analiz ediliyor...", end=" ", flush=True)
         
         try:
             response = scraper.get(bolumler_url, timeout=10)
-            # Sayfa içindeki tüm m3u8 linklerini regex ile süpür
-            all_m3u8s = re.findall(r'https?://[^\s"\'\\,]+\.m3u8[^\s"\'\\,]*', response.text)
-            all_m3u8s = [m.replace('\\/', '/') for m in all_m3u8s]
-            unique_m3u8s = list(dict.fromkeys(all_m3u8s))
+            # Sayfadaki mevcut tüm m3u8'leri al
+            found_m3u8s = re.findall(r'https?://[^\s"\'\\,]+\.m3u8[^\s"\'\\,]*', response.text)
+            found_m3u8s = [m.replace('\\/', '/') for m in found_m3u8s]
+            unique_m3u8s = list(dict.fromkeys(found_m3u8s))
 
             b_soup = BeautifulSoup(response.text, 'html.parser')
             eps = []
@@ -70,13 +70,23 @@ def run_scraper():
             select_box = b_soup.find('select', id='video-finder-changer')
             if select_box:
                 options = select_box.find_all('option', {'data-target': True})
+                print(f"({len(options)} Bölüm)")
+                
                 for i, opt in enumerate(options):
                     b_title = opt.get_text(strip=True)
-                    # M3U8 linkini sırayla eşleştir (Eğer m3u8 yoksa sayfa linkini kullan)
-                    m3u8_link = unique_m3u8s[i] if i < len(unique_m3u8s) else opt['data-target']
-                    eps.append({"ad": b_title, "link": m3u8_link})
+                    b_target = opt['data-target']
+                    
+                    # Önce listede sıradaki m3u8 var mı bak
+                    link = unique_m3u8s[i] if i < len(unique_m3u8s) else b_target
+                    
+                    # EĞER hala m3u8 değilse, o sayfanın içine gir ve zorla al (Deep Scan)
+                    if ".m3u8" not in link:
+                        print(f"   ⚠️ {b_title} için derin tarama yapılıyor...")
+                        link = get_single_m3u8(scraper, b_target)
+                    
+                    eps.append({"ad": b_title, "link": link})
                 
-                print(f"✅ {len(eps)} bölüm yakalandı.")
+                print(f"   ✅ {title} tamamlandı.")
 
             if eps:
                 memory_data[dizi_key] = {"isim": title, "resim": poster, "bolumler": eps}
@@ -91,7 +101,6 @@ def run_scraper():
 
 def create_html(series_data):
     file_name = "nowtv_vod.html"
-    # JS tarafında hata vermemesi için tırnakları ve özel karakterleri güvenli hale getiriyoruz
     json_safe = json.dumps(series_data, ensure_ascii=False).replace("'", "\\'")
     
     html_template = f'''<!DOCTYPE html>
@@ -101,26 +110,28 @@ def create_html(series_data):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>METV NOW VOD</title>
     <style>
-        body {{ margin: 0; background: #080808; color: #fff; font-family: sans-serif; }}
+        body {{ margin: 0; background: #050505; color: #fff; font-family: 'Segoe UI', sans-serif; }}
         .nav {{ background: #000; padding: 15px; border-bottom: 2px solid #f50057; display: flex; justify-content: space-between; position: sticky; top:0; z-index:99; }}
         .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 20px; }}
-        .card {{ background: #111; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid #222; }}
-        .card:hover {{ border-color: #f50057; transform: translateY(-3px); }}
+        .card {{ background: #111; border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid #222; transition: 0.3s; }}
+        .card:hover {{ border-color: #f50057; transform: scale(1.05); box-shadow: 0 5px 15px rgba(245,0,87,0.2); }}
         .card img {{ width: 100%; aspect-ratio: 2/3; object-fit: cover; }}
-        .card-name {{ padding: 8px; text-align: center; font-size: 11px; font-weight: bold; }}
+        .card-name {{ padding: 10px; text-align: center; font-size: 11px; font-weight: bold; background: #111; }}
         #player {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: none; z-index: 1000; }}
-        .btn {{ background: #f50057; color: #fff; border: none; padding: 10px; cursor: pointer; border-radius: 5px; }}
-        .hidden {{ display: none; }}
-        input {{ padding: 8px; border-radius: 20px; border: none; outline: none; }}
+        .btn {{ background: #f50057; color: #fff; border: none; padding: 10px 15px; cursor: pointer; border-radius: 5px; font-weight: bold; }}
+        input {{ padding: 8px 15px; border-radius: 20px; border: 1px solid #333; background: #111; color: #fff; width: 150px; }}
     </style>
 </head>
 <body>
-    <div class="nav"><b>METV NOW</b> <input type="text" id="sr" placeholder="Ara..." oninput="sh()"></div>
+    <div class="nav"><b>METV NOW VOD</b> <input type="text" id="sr" placeholder="Dizi ara..." oninput="sh()"></div>
     <div id="mG" class="grid"></div>
     <div id="eG" class="grid hidden"></div>
     <div id="player">
-        <div style="padding:10px; background:#000;"><button class="btn" onclick="cls()">KAPAT</button> <span id="curT" style="margin-left:15px; color:#f50057"></span></div>
-        <div id="vC" style="height:calc(100% - 60px)"></div>
+        <div style="padding:10px; display:flex; justify-content:space-between; align-items:center;">
+            <button class="btn" onclick="cls()">✕ KAPAT</button>
+            <span id="curT" style="color:#f50057; font-weight:bold;"></span>
+        </div>
+        <div id="vC" style="height:calc(100% - 65px)"></div>
     </div>
     <script>
         const series = JSON.parse('{json_safe}');
@@ -140,9 +151,9 @@ def create_html(series_data):
 
         function show(k) {{
             const eg = document.getElementById("eG");
-            document.getElementById("mG").classList.add("hidden");
-            eg.classList.remove("hidden");
-            eg.innerHTML = `<div style="grid-column:1/-1"><button class="btn" onclick="location.reload()">← GERİ</button> <h3 style="display:inline; margin-left:10px;">${{series[k].isim}}</h3></div>`;
+            document.getElementById("mG").style.display = "none";
+            eg.className = "grid";
+            eg.innerHTML = `<div style="grid-column:1/-1; margin-bottom:10px;"><button class="btn" onclick="location.reload()">← ANA MENÜ</button> <h2 style="display:inline; margin-left:15px;">${{series[k].isim}}</h2></div>`;
             series[k].bolumler.forEach(e => {{
                 const c = document.createElement("div");
                 c.className = "card";
