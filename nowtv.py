@@ -17,13 +17,16 @@ def slugify(text):
     return re.sub(r'[^a-z0-9]+', '-', text).strip('-')
 
 def get_now_m3u8(scraper, bolum_url):
+    """Bölüm sayfasındaki asıl m3u8 linkini bulur"""
     try:
-        # Sayfaya gir ve M3U8 linkini ara
+        # Engellenmemek için çok kısa bekleme
+        time.sleep(0.1)
         r = scraper.get(bolum_url, timeout=10)
+        # Geniş kapsamlı M3U8 arama
         m3u8_match = re.search(r'(https?://[^\s"\']+\.m3u8[^\s"\']*)', r.text)
         if m3u8_match:
             return m3u8_match.group(0).replace('\\/', '/')
-        return bolum_url # Bulamazsa kendi linkini dön
+        return bolum_url
     except:
         return bolum_url
 
@@ -35,71 +38,72 @@ def commit_and_push(file_name):
         subprocess.run(["git", "add", file_name], check=True)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
         if status:
-            subprocess.run(["git", "commit", "-m", "🔄 NOW TV VOD updated with Owl-Stage Scraper"], check=True)
+            subprocess.run(["git", "commit", "-m", "🔄 NOW TV VOD: Tüm Bölümler Güncellendi"], check=True)
             subprocess.run(["git", "push"], check=True)
             print("🚀 GitHub'a başarıyla yüklendi!")
+        else:
+            print("✨ Değişiklik yok, push atılmadı.")
     except Exception as e:
         print(f"❌ Git Hatası: {e}")
 
 def run_scraper():
-    print("🚀 Bot Başlatıldı. Kaynak JSON ve Owl-Stage yapısı taranıyor...")
+    print("🚀 Bot Başlatıldı. Tüm bölümler taranıyor...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
     try:
+        # GitHub'dan dizi listesini al
         source_resp = scraper.get(JSON_SOURCE_URL)
         target_series = json.loads(source_resp.text)
     except Exception as e:
-        print(f"❌ JSON okuma hatası: {e}")
+        print(f"❌ Kaynak JSON hatası: {e}")
         return
 
     memory_data = {}
 
-    for dizi_key, info in target_series.items():
+    for dizi_id, info in target_series.items():
         title = info['isim']
-        dizi_url = info['link']
-        poster = info['resim']
+        # /izle kısmını /bolumler yaparak tüm arşivi hedefle
+        bolumler_url = info['link'].split('/izle')[0].rstrip('/') + "/bolumler"
         
-        # Linki bölümler sayfasına çevir (Örn: /izle -> /bolumler)
-        bolumler_url = dizi_url.split('/izle')[0].rstrip('/') + "/bolumler"
-        
-        print(f"📺 {title} taranıyor: {bolumler_url}")
+        print(f"📺 {title} taranıyor...")
         
         try:
             resp = scraper.get(bolumler_url, timeout=15)
-            soup = BeautifulSoup(resp.text, 'html.parser')
+            # Regex ile sayfa içindeki TÜM bölüm linklerini (/bolum/123 gibi) topla
+            # Sadece slider (owl-item) değil, tüm HTML kaynağını tarar
+            raw_links = re.findall(r'href=["\']([^"\']+/bolum/\d+)["\']', resp.text)
             
-            # Paylaştığın yapıya göre: .owl-item içindeki a etiketlerini bul
-            items = soup.select('.owl-item')
-            if not items:
-                # Alternatif: Owl-Stage yoksa standart list-item ara
-                items = soup.select('.list-item, .video-card')
-
+            # Tekrar eden linkleri temizle
+            unique_links = list(dict.fromkeys(raw_links))
+            
             eps = []
-            for item in items:
-                a_tag = item.find('a', href=True)
-                name_tag = item.select_one('.program-name')
+            for link in unique_links:
+                full_b_url = BASE_URL + link if link.startswith('/') else link
                 
-                if a_tag and "/bolum/" in a_tag['href']:
-                    b_url = BASE_URL + a_tag['href'] if a_tag['href'].startswith('/') else a_tag['href']
-                    b_title = name_tag.get_text(strip=True) if name_tag else "Bölüm"
-                    
-                    # Video linkini yakala
-                    m3u8 = get_now_m3u8(scraper, b_url)
-                    
-                    # Aynı linki tekrar ekleme
-                    if not any(e['link'] == m3u8 for e in eps):
-                        eps.append({"ad": b_title, "link": m3u8})
-                        print(f"   ✅ Yakalandı: {b_title}")
+                # Bölüm adını linkten tahmin et (Örn: /bolum/45 -> 45. Bölüm)
+                b_number = link.split('/')[-1]
+                b_name = f"{b_number}. Bölüm"
+                
+                # Video linkini çek
+                m3u8 = get_now_m3u8(scraper, full_b_url)
+                
+                eps.append({"ad": b_name, "link": m3u8})
+            
+            # Bölümleri sayısal olarak sırala (1, 2, 3...)
+            eps.sort(key=lambda x: int(re.search(r'\d+', x['ad']).group()) if re.search(r'\d+', x['ad']) else 0)
 
             if eps:
-                # Bölümleri normal sıraya diz (Sitede genelde sondan başa gelir)
-                memory_data[dizi_key] = {
+                memory_data[dizi_id] = {
                     "isim": title,
-                    "resim": poster,
-                    "bolumler": eps[::-1] 
+                    "resim": info['resim'],
+                    "bolumler": eps # Eskiden yeniye sıralı
                 }
+                print(f"   ✅ {len(eps)} bölüm başarıyla listelendi.")
+            else:
+                print(f"   ⚠️ Hiç bölüm bulunamadı!")
+
         except Exception as e:
-            print(f"   ⚠️ {title} hatası: {e}")
+            print(f"   ❌ {title} taranırken hata: {e}")
 
     create_html(memory_data)
 
@@ -107,7 +111,6 @@ def create_html(series_data):
     file_name = "nowtv_vod.html"
     json_embedded = json.dumps(series_data, ensure_ascii=False)
     
-    # Senin istediğin METV tarzı mor-siyah modern arayüz
     html_template = f'''<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -115,66 +118,75 @@ def create_html(series_data):
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {{ margin: 0; background: #0a0a0c; color: #fff; font-family: sans-serif; font-style: italic; }}
-        .header {{ background: #15161a; padding: 15px 25px; border-bottom: 2px solid #572aa7; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }}
+        body {{ margin: 0; background: #050505; color: white; font-family: 'Segoe UI', sans-serif; font-style: italic; }}
+        .header {{ background: #111; padding: 15px 25px; border-bottom: 2px solid #572aa7; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; }}
         .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; padding: 20px; }}
-        .card {{ background: #15161a; border: 1px solid #323442; border-radius: 8px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; aspect-ratio: 2/3; }}
-        .card:hover {{ border-color: #572aa7; transform: translateY(-5px); }}
-        .card img {{ width: 100%; height: 100%; object-fit: cover; }}
-        .card-info {{ position: absolute; bottom: 0; background: linear-gradient(transparent, black); width: 100%; padding: 8px; text-align: center; font-size: 12px; }}
-        .player-overlay {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: none; }}
-        .btn-back {{ background: #572aa7; color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 10px; }}
+        .card {{ background: #111; border: 1px solid #222; border-radius: 10px; overflow: hidden; cursor: pointer; transition: 0.3s; position: relative; }}
+        .card:hover {{ border-color: #572aa7; transform: translateY(-5px); box-shadow: 0 5px 15px rgba(87,42,167,0.3); }}
+        .card img {{ width: 100%; aspect-ratio: 2/3; object-fit: cover; }}
+        .card-txt {{ padding: 10px; text-align: center; font-size: 13px; font-weight: bold; background: linear-gradient(transparent, #000); position: absolute; bottom: 0; width: 100%; box-sizing: border-box; }}
+        .player {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 2000; display: none; }}
+        .btn {{ background: #572aa7; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px; margin: 15px; font-weight: bold; }}
         .hidden {{ display: none !important; }}
     </style>
 </head>
 <body>
     <div class="header">
-        <div style="color: #572aa7; font-weight: bold; font-size: 20px;">METV NOW VOD</div>
-        <input type="text" id="srch" placeholder="Ara..." oninput="search()" style="background:#000; color:#fff; border:1px solid #323442; padding:5px 15px; border-radius:20px;">
+        <div style="color:#572aa7; font-size:22px; font-weight:bold;">METV NOW VOD</div>
+        <input type="text" id="srch" placeholder="Ara..." oninput="doSearch()" style="background:#000; color:#fff; border:1px solid #333; padding:8px 15px; border-radius:20px; outline:none;">
     </div>
-    <div id="main_g" class="grid"></div>
-    <div id="eps_g" class="grid hidden"></div>
-    <div id="p_view" class="player-overlay">
-        <button class="btn-back" onclick="closeP()">✕ KAPAT</button>
-        <div id="v_area" style="height:calc(100% - 70px);"></div>
+    
+    <div id="m-grid" class="grid"></div>
+    <div id="e-grid" class="grid hidden"></div>
+    
+    <div id="p-view" class="player">
+        <button class="btn" onclick="closeP()">✕ KAPAT</button>
+        <div id="v-frame" style="height: calc(100% - 80px);"></div>
     </div>
+
     <script>
         const data = {json_embedded};
-        const BRADMAX = "{BRADMAX_PLAYER}";
+        const PLAYER_URL = "{BRADMAX_PLAYER}";
+
         function init() {{
-            const g = document.getElementById("main_g");
+            const mg = document.getElementById("m-grid");
             Object.keys(data).forEach(id => {{
                 const d = data[id];
                 const c = document.createElement("div");
                 c.className = "card";
-                c.innerHTML = `<img src="${{d.resim}}"><div class="card-info">${{d.isim.toUpperCase()}}</div>`;
+                c.innerHTML = `<img src="${{d.resim}}"><div class="card-txt">${{d.isim.toUpperCase()}}</div>`;
                 c.onclick = () => showE(id);
-                g.appendChild(c);
+                mg.appendChild(c);
             }});
         }}
+
         function showE(id) {{
-            document.getElementById("main_g").classList.add("hidden");
-            const eg = document.getElementById("eps_g");
+            window.scrollTo(0,0);
+            document.getElementById("m-grid").classList.add("hidden");
+            const eg = document.getElementById("e-grid");
             eg.classList.remove("hidden");
-            eg.innerHTML = `<div style="grid-column: 1/-1;"><button class="btn-back" onclick="goB()">← DİZİLER</button> <h3 style="display:inline">${{data[id].isim}}</h3></div>`;
-            data[id].bolumler.forEach(e => {{
+            eg.innerHTML = `<div style="grid-column:1/-1;"><button class="btn" onclick="back()">← DİZİLER</button><h2 style="display:inline;margin-left:15px;">${{data[id].isim}}</h2></div>`;
+            
+            data[id].bolumler.forEach(ep => {{
                 const c = document.createElement("div");
                 c.className = "card";
-                c.innerHTML = `<img src="${{data[id].resim}}"><div class="card-info">${{e.ad}}</div>`;
-                c.onclick = () => play(e.link);
+                c.innerHTML = `<img src="${{data[id].resim}}"><div class="card-txt">${{ep.ad}}</div>`;
+                c.onclick = () => play(ep.link);
                 eg.appendChild(c);
             }});
         }}
-        function play(l) {{
-            document.getElementById("p_view").style.display = "block";
-            let u = l.includes(".m3u8") ? BRADMAX + encodeURIComponent(l) : l;
-            document.getElementById("v_area").innerHTML = `<iframe src="${{u}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
+
+        function play(link) {{
+            document.getElementById("p-view").style.display = "block";
+            let final = link.includes(".m3u8") ? PLAYER_URL + encodeURIComponent(link) : link;
+            document.getElementById("v-frame").innerHTML = `<iframe src="${{final}}&autoplay=true" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>`;
         }}
-        function closeP() {{ document.getElementById("p_view").style.display="none"; document.getElementById("v_area").innerHTML=""; }}
-        function goB() {{ document.getElementById("eps_g").classList.add("hidden"); document.getElementById("main_g").classList.remove("hidden"); }}
-        function search() {{
-            let v = document.getElementById("srch").value.toLowerCase();
-            document.querySelectorAll(".card").forEach(c => c.style.display = c.innerText.toLowerCase().includes(v) ? "" : "none");
+
+        function closeP() {{ document.getElementById("p-view").style.display="none"; document.getElementById("v-frame").innerHTML=""; }}
+        function back() {{ document.getElementById("e-grid").classList.add("hidden"); document.getElementById("m-grid").classList.remove("hidden"); }}
+        function doSearch() {{
+            let q = document.getElementById("srch").value.toLowerCase();
+            document.querySelectorAll(".card").forEach(c => c.style.display = c.innerText.toLowerCase().includes(q) ? "" : "none");
         }}
         init();
     </script>
