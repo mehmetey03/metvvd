@@ -24,7 +24,7 @@ RETRY_DELAY = 0.5
 data_lock = Lock()
 
 # ============================================================================
-# HEADERLAR (DOĞRU AJAX HEADER)
+# HEADERLAR
 # ============================================================================
 HEADERS_PAGE = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -155,4 +155,46 @@ def process_page(page, output):
         for a in films:
             info = extract_film_data(a)
             if info:
-                tasks.append(ex.
+                tasks.append(
+                    ex.submit(process_film, info, output)
+                )
+
+        for _ in as_completed(tasks):
+            pass
+
+    print(f"✅ Sayfa {page}: {len(films)} film")
+    return len(films)
+
+# ============================================================================
+# ANA
+# ============================================================================
+def main():
+    print("🚀 HDFilmCehennemi Scraper Başladı")
+    print(f"📊 Sayfa: {PAGES_TO_SCRAPE}\n")
+
+    films = {}
+    start = time.time()
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        futures = []
+        for i in range(1, PAGES_TO_SCRAPE + 1):
+            futures.append(ex.submit(process_page, i, films))
+
+        for _ in as_completed(futures):
+            pass
+
+    elapsed = time.time() - start
+
+    print("\n" + "=" * 50)
+    print(f"🎬 Toplam Film: {len(films)}")
+    print(f"⏱ Süre: {elapsed:.2f} saniye")
+    print("=" * 50)
+
+    with open("hdfilmcehennemi.json", "w", encoding="utf-8") as f:
+        json.dump(films, f, ensure_ascii=False, indent=2)
+
+    print("✅ JSON oluşturuldu: hdfilmcehennemi.json")
+
+
+if __name__ == "__main__":
+    main()
