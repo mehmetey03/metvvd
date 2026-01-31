@@ -3,113 +3,72 @@ from bs4 import BeautifulSoup
 import json
 import time
 import re
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
 
 # ============================================================================
 # AYARLAR
 # ============================================================================
 BASE_URL = "https://www.hdfilmcehennemi.com"
-# Yeni URL yapısı: Sayfalar artık doğrudan kategori URL'si üzerinden yürüyor
-PAGES_TO_SCRAPE = 5 
-MAX_WORKERS = 10
+# Site veriyi genellikle bu tip bir endpoint'ten çeker
+API_ENDPOINT = f"{BASE_URL}/load/page/{{page}}/" 
+PAGES_TO_SCRAPE = 5
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Referer": BASE_URL
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest", # Ajax isteği olduğunu belirtir (Kritik)
+    "Referer": BASE_URL,
+    "Accept": "application/json, text/javascript, */*; q=0.01"
 }
 
-filmler_data = {}
-data_lock = Lock()
-session = requests.Session()
-session.headers.update(HEADERS)
+def scrape():
+    filmler_data = {}
+    print(f"🚀 Scraping started via API Mode...")
 
-def slugify(text):
-    tr_map = str.maketrans("ığüşöç", "igusoc")
-    text = text.lower().translate(tr_map)
-    return re.sub(r'[^a-z0-9]', '-', text).strip('-')
-
-def get_video_link(film_url):
-    try:
-        resp = session.get(film_url, timeout=10)
-        soup = BeautifulSoup(resp.content, "html.parser")
-        # Site Rapidrame veya benzeri bir iframe kullanıyor
-        iframe = soup.select_one('iframe[data-src*="rapid"], iframe.close')
-        if iframe:
-            src = iframe.get('data-src') or iframe.get('src')
-            if "rapidrame_id=" in src:
-                return f"{BASE_URL}/rplayer/{src.split('rapidrame_id=')[1].split('&')[0]}"
-            return src
-    except:
-        pass
-    return ""
-
-def process_page(page_num):
-    # Sitenin yeni sayfa yapısı genellikle /page/2/ şeklinde ana dizindedir
-    url = f"{BASE_URL}/page/{page_num}/"
-    print(f"🔎 Sayfa {page_num} taranıyor...")
-    
-    try:
-        response = session.get(url, timeout=15)
-        soup = BeautifulSoup(response.content, "html.parser")
+    for page in range(1, PAGES_TO_SCRAPE + 1):
+        # Bazı sitelerde kategori belirtmek gerekebilir (film-izle-1 vb.)
+        # Eğer bu URL çalışmazsa BASE_URL + "/page/" + str(page) deneyin
+        url = f"{BASE_URL}/load/page/{page}/categories/film-izle-7/" 
         
-        # Güncel seçici: Sitedeki film kartlarını bulur
-        items = soup.select('div.poster-container a, a.poster, article.post a')
-        
-        page_results = []
-        for a in items:
-            title = a.get('title') or (a.find('img').get('alt') if a.find('img') else "")
-            link = a.get('href')
-            img = a.find('img')
+        print(f"🔎 Sayfa {page} taranıyor...", end="\r")
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=15)
             
-            if title and link and link.startswith('http'):
-                poster = img.get('data-src') or img.get('src') or ""
-                page_results.append({
-                    'film_adi': title.strip(),
-                    'film_link': link,
-                    'poster_url': poster.split('?')[0]
-                })
-        return page_results
-    except Exception as e:
-        print(f"❌ Sayfa {page_num} hatası: {e}")
-        return []
+            # Eğer yanıt JSON ise içindeki HTML'i çekiyoruz
+            if response.status_code == 200:
+                data = response.json()
+                html_content = data.get('html', '')
+                soup = BeautifulSoup(html_content, "html.parser")
+            else:
+                # API başarısızsa doğrudan HTML sayfayı dene
+                response = requests.get(f"{BASE_URL}/page/{page}/", headers=HEADERS)
+                soup = BeautifulSoup(response.content, "html.parser")
 
-def main():
-    start_time = time.time()
-    all_links = []
-
-    # 1. Aşama: Linkleri Topla
-    for p in range(1, PAGES_TO_SCRAPE + 1):
-        links = process_page(p)
-        all_links.extend(links)
-    
-    # Tekilleştirme (Duplicate prevention)
-    unique_links = {v['film_link']: v for v in all_links}.values()
-    print(f"✅ {len(unique_links)} benzersiz film bulundu. Detaylar çekiliyor...")
-
-    # 2. Aşama: Video Linklerini Çek (Paralel)
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_film = {executor.submit(get_video_link, f['film_link']): f for f in unique_links}
-        
-        for future in as_completed(future_to_film):
-            film_info = future_to_film[future]
-            video_url = future.result()
+            # Film kutularını yakala
+            items = soup.find_all('a', class_='poster')
             
-            film_id = slugify(film_info['film_adi'])
-            with data_lock:
-                filmler_data[film_id] = {
-                    "isim": film_info['film_adi'],
-                    "resim": film_info['poster_url'],
-                    "link": video_url
-                }
+            for a in items:
+                title = a.get('title', '').strip()
+                link = a.get('href', '')
+                img_tag = a.find('img')
+                
+                if title and link:
+                    img_url = ""
+                    if img_tag:
+                        img_url = img_tag.get('data-src') or img_tag.get('src', '')
+                    
+                    film_id = re.sub(r'[^a-z0-9]', '-', title.lower())
+                    filmler_data[film_id] = {
+                        "isim": title,
+                        "resim": img_url.split('?')[0],
+                        "link": link # Daha sonra detay sayfasından video çekilebilir
+                    }
+        except Exception as e:
+            print(f"\n❌ Sayfa {page} hatası: {e}")
 
-    # Dosyaları kaydet
+    print(f"\n✅ Toplam {len(filmler_data)} film bulundu.")
+    
+    # Sonuçları Kaydet
     with open("hdfilmcehennemi.json", "w", encoding="utf-8") as f:
         json.dump(filmler_data, f, ensure_ascii=False, indent=2)
-    
-    print(f"🏁 Tamamlandı! Süre: {time.time() - start_time:.2f} sn. Toplam: {len(filmler_data)} film.")
 
 if __name__ == "__main__":
-    main()
+    scrape()
