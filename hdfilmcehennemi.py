@@ -1,181 +1,95 @@
-import sys
 import requests
 from bs4 import BeautifulSoup
-import time
 import json
-from datetime import datetime
+import time
+import re
 
-# Komut satırı argümanlarını al
-PAGES_TO_SCRAPE = int(sys.argv[1]) if len(sys.argv) > 1 else 5
-DELAY_BETWEEN_REQUESTS = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
+# ============================================================================
+# AYARLAR
+# ============================================================================
+TARGET_BASE_URL = "https://www.hdfilmcehennemi.com"
+PROXY_URL = "https://api.codetabs.com/v1/proxy/?quest="
+PAGES_TO_SCRAPE = 3
 
-print(f"📅 Scraping started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-print(f"📊 Pages to scrape: {PAGES_TO_SCRAPE}")
-print(f"⏱️ Delay between pages: {DELAY_BETWEEN_REQUESTS} seconds")
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+}
 
-BASE_URL = "https://www.hdfilmcehennemi.nl"
-all_films = []
-
-for page in range(1, PAGES_TO_SCRAPE + 1):
-    print(f"🔍 Scraping page {page}...")
+def get_page_content(page_num):
+    """Codetabs Proxy üzerinden sayfayı çeker."""
+    target = f"{TARGET_BASE_URL}/page/{page_num}/"
+    full_proxy_url = f"{PROXY_URL}{target}"
     
     try:
-        # Sayfayı indir
-        if page == 1:
-            url = BASE_URL
+        print(f"📡 Proxy üzerinden bağlanılıyor: Sayfa {page_num}...")
+        response = requests.get(full_proxy_url, headers=HEADERS, timeout=20)
+        
+        if response.status_code == 200:
+            return response.content
         else:
-            url = f"{BASE_URL}/sayfa/{page}/"
+            print(f"⚠️ Proxy Hatası: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"❌ Bağlantı hatası: {e}")
+        return None
+
+def parse_films(html_content):
+    """HTML içeriğini senin parser yapınla ayrıştırır."""
+    if not html_content:
+        return []
         
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        # HTML'i parse et
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Film poster elemanlarını bul
-        film_elements = soup.find_all('a', class_='poster')
-        
-        print(f"   Found {len(film_elements)} films on page {page}")
-        
-        for film in film_elements:
+    soup = BeautifulSoup(html_content, 'html.parser')
+    film_elements = soup.find_all('a', class_='poster')
+    parsed_films = []
+
+    for film in film_elements:
+        try:
             film_data = {}
             
-            # Temel bilgiler
-            title_element = film.find('strong', class_='poster-title')
-            film_data['title'] = title_element.text.strip() if title_element else 'N/A'
+            # Başlık
+            title_el = film.find('strong', class_='poster-title')
+            film_data['title'] = title_el.text.strip() if title_el else "Bilinmiyor"
             
-            film_data['link'] = film.get('href', 'N/A')
+            # Link (Proxy URL'sini temizleyip orijinal linki alma)
+            raw_link = film.get('href')
+            film_data['link'] = raw_link if raw_link.startswith('http') else f"{TARGET_BASE_URL}{raw_link}"
             
-            # Meta bilgileri (yıl, yorum sayısı)
-            meta_div = film.find('div', class_='poster-meta')
-            if meta_div:
-                spans = meta_div.find_all('span')
-                if len(spans) >= 1:
-                    film_data['year'] = spans[0].text.strip()
-                else:
-                    film_data['year'] = 'N/A'
-                
-                if len(spans) >= 2:
-                    film_data['comment_count'] = spans[1].text.strip()
-                else:
-                    film_data['comment_count'] = '0'
-            else:
-                film_data['year'] = 'N/A'
-                film_data['comment_count'] = '0'
+            # IMDB
+            imdb_el = film.find('span', class_='imdb')
+            film_data['imdb'] = imdb_el.text.strip() if imdb_el else "N/A"
             
-            # IMDB puanı
-            imdb_element = film.find('span', class_='imdb')
-            film_data['imdb_rating'] = imdb_element.text.strip() if imdb_element else 'N/A'
+            # Resim
+            img = film.find('img')
+            if img:
+                film_data['image'] = img.get('data-src') or img.get('src')
+
+            parsed_films.append(film_data)
+        except:
+            continue
             
-            # Dil/altyazı bilgisi
-            lang_element = film.find('span', class_='poster-lang')
-            if lang_element:
-                tr_flag = lang_element.find('i', class_='tr-flag')
-                text_span = lang_element.find('span')
-                
-                if tr_flag:
-                    film_data['language'] = 'Türkçe Dublaj'
-                elif text_span:
-                    film_data['language'] = text_span.text.strip()
-                else:
-                    film_data['language'] = 'N/A'
-            else:
-                film_data['language'] = 'N/A'
-            
-            # Resim URL'leri
-            img_element = film.find('img', class_='lazyload')
-            if img_element:
-                film_data['image'] = img_element.get('data-src', 'N/A')
-                srcset = img_element.get('data-srcset', '')
-                if srcset and ' ' in srcset:
-                    parts = srcset.split(' ')
-                    film_data['image_2x'] = parts[1] if len(parts) > 1 else 'N/A'
-                else:
-                    film_data['image_2x'] = 'N/A'
-            else:
-                film_data['image'] = 'N/A'
-                film_data['image_2x'] = 'N/A'
-            
-            all_films.append(film_data)
+    return parsed_films
+
+def main():
+    all_films = []
+    
+    for page in range(1, PAGES_TO_SCRAPE + 1):
+        content = get_page_content(page)
+        films = parse_films(content)
         
-        # Sayfalar arasında gecikme
-        if page < PAGES_TO_SCRAPE:
-            time.sleep(DELAY_BETWEEN_REQUESTS)
+        if films:
+            all_films.extend(films)
+            print(f"✅ Sayfa {page} başarıyla işlendi. (+{len(films)} film)")
+        else:
+            print(f"❌ Sayfa {page} içeriği boş veya alınamadı.")
             
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error scraping page {page}: {e}")
-        continue
-    except Exception as e:
-        print(f"❌ Unexpected error on page {page}: {e}")
-        continue
+        # Proxy servisini yormamak için kısa bir bekleme
+        time.sleep(2)
 
-print(f"\n✅ Scraping completed! Total films collected: {len(all_films)}")
-
-# HTML dosyasını kaydet (tüm içerik)
-try:
-    with open('hdfilmcehennemi.html', 'w', encoding='utf-8') as f:
-        f.write(response.text if 'response' in locals() else '')
-    print("📁 HTML file saved: hdfilmcehennemi.html")
-except Exception as e:
-    print(f"❌ Error saving HTML: {e}")
-
-# JSON olarak kaydet
-try:
+    # Sonuçları Kaydet
     with open('hdfilmcehennemi.json', 'w', encoding='utf-8') as f:
         json.dump(all_films, f, ensure_ascii=False, indent=2)
-    print("📁 JSON file saved: hdfilmcehennemi.json")
-except Exception as e:
-    print(f"❌ Error saving JSON: {e}")
 
-# İstatistikleri hesapla
-if all_films:
-    print("\n📊 Statistics:")
-    print(f"   Total films: {len(all_films)}")
-    
-    # Yıllara göre dağılım
-    years = {}
-    for film in all_films:
-        year = film.get('year', 'N/A')
-        if year != 'N/A':
-            years[year] = years.get(year, 0) + 1
-    
-    if years:
-        print("   Films by year:")
-        for year, count in sorted(years.items(), key=lambda x: x[0], reverse=True)[:10]:
-            print(f"     {year}: {count} films")
-    
-    # IMDB puan istatistikleri
-    imdb_scores = []
-    for film in all_films:
-        rating = film.get('imdb_rating', 'N/A')
-        if rating != 'N/A':
-            try:
-                score = float(rating)
-                imdb_scores.append(score)
-            except (ValueError, TypeError):
-                pass
-    
-    if imdb_scores:
-        avg_score = sum(imdb_scores) / len(imdb_scores)
-        max_score = max(imdb_scores)
-        min_score = min(imdb_scores)
-        print(f"   Average IMDB score: {avg_score:.2f}")
-        print(f"   Highest IMDB score: {max_score}")
-        print(f"   Lowest IMDB score: {min_score}")
-    
-    # Dil dağılımı
-    languages = {}
-    for film in all_films:
-        lang = film.get('language', 'N/A')
-        languages[lang] = languages.get(lang, 0) + 1
-    
-    if languages:
-        print("   Language distribution:")
-        for lang, count in languages.items():
-            print(f"     {lang}: {count} films")
+    print(f"\n🏁 İşlem Tamamlandı! Toplam {len(all_films)} film kaydedildi.")
 
-print(f"\n🏁 Scraping finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+if __name__ == "__main__":
+    main()
