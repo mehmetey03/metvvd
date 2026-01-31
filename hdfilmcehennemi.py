@@ -1,104 +1,100 @@
-import requests
 from bs4 import BeautifulSoup
 import json
-import time
-import re
 
-# ============================================================================
-# AYARLAR
-# ============================================================================
-BASE_URL = "https://www.hdfilmcehennemi.com"
-PAGES_TO_SCRAPE = 5
+# HTML içeriğini ayrıştır
+soup = BeautifulSoup(html_content, 'html.parser')
 
-# Modern tarayıcı taklidi
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cache-Control": "max-age=0",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1"
-}
+# Tüm film poster elemanlarını bul
+film_elements = soup.find_all('a', class_='poster')
 
-def get_session():
-    """Çerezleri toplamak için bir oturum başlatır."""
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    try:
-        # Önce ana sayfaya giderek çerezleri alalım
-        print("🔑 Oturum başlatılıyor (Çerezler toplanıyor)...")
-        session.get(BASE_URL, timeout=10)
-        return session
-    except:
-        return session
+films = []
 
-def scrape():
-    session = get_session()
-    filmler_data = {}
+for film in film_elements:
+    film_data = {}
     
-    print(f"🚀 Scraping started with Session Mode...")
-
-    for page in range(1, PAGES_TO_SCRAPE + 1):
-        # Site yapısına göre iki farklı URL formatını da deniyoruz
-        url = f"{BASE_URL}/page/{page}/"
-        if page == 1:
-            url = f"{BASE_URL}/"
-
-        print(f"🔎 Sayfa {page} taranıyor... ({url})")
+    # Film başlığı
+    title_element = film.find('strong', class_='poster-title')
+    film_data['title'] = title_element.text.strip() if title_element else None
+    
+    # Film linki
+    film_data['link'] = film.get('href')
+    
+    # Film yılı
+    year_element = film.find('div', class_='poster-meta').find_all('span')[0]
+    film_data['year'] = year_element.text.strip() if year_element else None
+    
+    # Yorum sayısı
+    comment_element = film.find('div', class_='poster-meta').find_all('span')[1]
+    film_data['comment_count'] = comment_element.text.strip() if comment_element else None
+    
+    # IMDB puanı
+    imdb_element = film.find('span', class_='imdb')
+    film_data['imdb_rating'] = imdb_element.text.strip() if imdb_element else None
+    
+    # Dil/altyazı bilgisi
+    lang_element = film.find('span', class_='poster-lang')
+    if lang_element:
+        # Türkçe Dublaj/Altayazı durumunu kontrol et
+        tr_flag = lang_element.find('i', class_='tr-flag')
+        text_span = lang_element.find('span')
         
-        try:
-            # İnsan taklidi için küçük bir bekleme
-            time.sleep(1.5)
-            response = session.get(url, timeout=15)
-            
-            if response.status_code != 200:
-                print(f"⚠️ Sayfa {page} erişilemez durumda (Kod: {response.status_code})")
-                continue
-
-            soup = BeautifulSoup(response.content, "html.parser")
-            
-            # Seçicileri genişletiyoruz: Sitenin farklı versiyonlarında 
-            # 'poster', 'film-item' veya 'post' kullanılabilir.
-            items = soup.find_all(['a', 'div'], class_=['poster', 'post-item', 'film-box'])
-            
-            # Eğer yukarıdaki bulamazsa direkt linkleri tara
-            if not items:
-                items = soup.select('div.poster-container a')
-
-            for item in items:
-                # Eğer item bir div ise içindeki a'yı bul, a ise kendisini kullan
-                a_tag = item if item.name == 'a' else item.find('a')
-                if not a_tag: continue
-                
-                title = a_tag.get('title') or a_tag.text.strip()
-                link = a_tag.get('href', '')
-                
-                # Resim URL'sini çekme (Lazy load desteğiyle)
-                img_tag = a_tag.find('img')
-                img_url = ""
-                if img_tag:
-                    img_url = img_tag.get('data-src') or img_tag.get('src') or ""
-
-                if title and link.startswith('http'):
-                    film_id = re.sub(r'[^a-z0-9]', '-', title.lower())
-                    filmler_data[film_id] = {
-                        "isim": title,
-                        "resim": img_url.split('?')[0],
-                        "link": link
-                    }
-            
-            print(f"✅ Sayfa {page}: {len(items)} potansiyel öğe tarandı.")
-
-        except Exception as e:
-            print(f"❌ Sayfa {page} hatası: {e}")
-
-    print(f"\n📊 İşlem Tamamlandı. Toplam {len(filmler_data)} film veritabanına eklendi.")
+        if tr_flag:
+            film_data['language'] = 'Türkçe Dublaj'
+        elif text_span:
+            film_data['language'] = text_span.text.strip()
+        else:
+            film_data['language'] = 'Bilinmiyor'
     
-    with open("hdfilmcehennemi.json", "w", encoding="utf-8") as f:
-        json.dump(filmler_data, f, ensure_ascii=False, indent=2)
+    # Resim URL'leri
+    img_element = film.find('img', class_='lazyload')
+    if img_element:
+        film_data['image'] = img_element.get('data-src')
+        film_data['image_2x'] = img_element.get('data-srcset', '').split(' ')[1] if 'data-srcset' in img_element.attrs else None
+    
+    # Popover içeriği (detaylı bilgiler)
+    popover = film.find_next_sibling('div', class_='poster-popover')
+    if popover and 'synced' in popover.get('class', []):
+        # IMDB puanı ve oy sayısı
+        rating_element = popover.find('div', class_='popover-rating')
+        if rating_element:
+            rating_text = rating_element.find('p')
+            review_count = rating_element.find('span', class_='review-count')
+            film_data['detailed_imdb'] = rating_text.text.strip() if rating_text else None
+            film_data['review_count'] = review_count.text.strip() if review_count else None
+        
+        # Özet
+        description = popover.find('p', class_='popover-description')
+        if description:
+            # "Özet" başlığını kaldır
+            summary = description.text.replace('Özet', '').strip()
+            film_data['summary'] = summary
+        
+        # Meta bilgileri (kanal, türler, kategori)
+        meta_elements = popover.find_all('span')
+        for meta in meta_elements:
+            strong_tag = meta.find('strong')
+            if strong_tag:
+                key = strong_tag.text.strip().lower()
+                strong_tag.extract()  # strong etiketini kaldır
+                value = meta.text.strip()
+                
+                if 'kanal' in key:
+                    film_data['channel'] = value
+                elif 'türler' in key:
+                    film_data['genres'] = [g.strip() for g in value.split(',')]
+                elif 'kategori' in key:
+                    film_data['category'] = value
+    
+    films.append(film_data)
 
-if __name__ == "__main__":
-    scrape()
+# JSON olarak kaydet
+with open('films.json', 'w', encoding='utf-8') as f:
+    json.dump(films, f, ensure_ascii=False, indent=2)
+
+print(f"Toplam {len(films)} film bulundu.")
+print("Veriler 'films.json' dosyasına kaydedildi.")
+
+# İlk filmi göster
+if films:
+    print("\nİlk film bilgisi:")
+    print(json.dumps(films[0], ensure_ascii=False, indent=2))
