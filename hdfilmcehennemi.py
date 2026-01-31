@@ -1,100 +1,81 @@
 from bs4 import BeautifulSoup
 import json
+import re
 
-# HTML içeriğini ayrıştır
-soup = BeautifulSoup(html_content, 'html.parser')
+def parse_html(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    film_elements = soup.find_all('a', class_='poster')
+    films = []
 
-# Tüm film poster elemanlarını bul
-film_elements = soup.find_all('a', class_='poster')
-
-films = []
-
-for film in film_elements:
-    film_data = {}
-    
-    # Film başlığı
-    title_element = film.find('strong', class_='poster-title')
-    film_data['title'] = title_element.text.strip() if title_element else None
-    
-    # Film linki
-    film_data['link'] = film.get('href')
-    
-    # Film yılı
-    year_element = film.find('div', class_='poster-meta').find_all('span')[0]
-    film_data['year'] = year_element.text.strip() if year_element else None
-    
-    # Yorum sayısı
-    comment_element = film.find('div', class_='poster-meta').find_all('span')[1]
-    film_data['comment_count'] = comment_element.text.strip() if comment_element else None
-    
-    # IMDB puanı
-    imdb_element = film.find('span', class_='imdb')
-    film_data['imdb_rating'] = imdb_element.text.strip() if imdb_element else None
-    
-    # Dil/altyazı bilgisi
-    lang_element = film.find('span', class_='poster-lang')
-    if lang_element:
-        # Türkçe Dublaj/Altayazı durumunu kontrol et
-        tr_flag = lang_element.find('i', class_='tr-flag')
-        text_span = lang_element.find('span')
+    for film in film_elements:
+        film_data = {}
         
-        if tr_flag:
-            film_data['language'] = 'Türkçe Dublaj'
-        elif text_span:
-            film_data['language'] = text_span.text.strip()
-        else:
-            film_data['language'] = 'Bilinmiyor'
-    
-    # Resim URL'leri
-    img_element = film.find('img', class_='lazyload')
-    if img_element:
-        film_data['image'] = img_element.get('data-src')
-        film_data['image_2x'] = img_element.get('data-srcset', '').split(' ')[1] if 'data-srcset' in img_element.attrs else None
-    
-    # Popover içeriği (detaylı bilgiler)
-    popover = film.find_next_sibling('div', class_='poster-popover')
-    if popover and 'synced' in popover.get('class', []):
-        # IMDB puanı ve oy sayısı
-        rating_element = popover.find('div', class_='popover-rating')
-        if rating_element:
-            rating_text = rating_element.find('p')
-            review_count = rating_element.find('span', class_='review-count')
-            film_data['detailed_imdb'] = rating_text.text.strip() if rating_text else None
-            film_data['review_count'] = review_count.text.strip() if review_count else None
-        
-        # Özet
-        description = popover.find('p', class_='popover-description')
-        if description:
-            # "Özet" başlığını kaldır
-            summary = description.text.replace('Özet', '').strip()
-            film_data['summary'] = summary
-        
-        # Meta bilgileri (kanal, türler, kategori)
-        meta_elements = popover.find_all('span')
-        for meta in meta_elements:
-            strong_tag = meta.find('strong')
-            if strong_tag:
-                key = strong_tag.text.strip().lower()
-                strong_tag.extract()  # strong etiketini kaldır
-                value = meta.text.strip()
+        try:
+            # Temel Bilgiler
+            title_element = film.find('strong', class_='poster-title')
+            film_data['title'] = title_element.text.strip() if title_element else "Bilinmiyor"
+            film_data['link'] = film.get('href')
+            
+            # Meta Bilgileri (Yıl ve Yorum)
+            meta_div = film.find('div', class_='poster-meta')
+            if meta_div:
+                spans = meta_div.find_all('span')
+                film_data['year'] = spans[0].text.strip() if len(spans) > 0 else None
+                film_data['comment_count'] = spans[1].text.strip() if len(spans) > 1 else "0"
+            
+            # IMDB Puanı
+            imdb_element = film.find('span', class_='imdb')
+            film_data['imdb_rating'] = imdb_element.text.strip() if imdb_element else None
+            
+            # Dil Bilgisi (İkon Kontrolü)
+            lang_element = film.find('span', class_='poster-lang')
+            if lang_element:
+                if lang_element.find('i', class_='tr-flag'):
+                    film_data['language'] = 'Türkçe Dublaj'
+                else:
+                    film_data['language'] = lang_element.text.strip()
+            
+            # Görsel (Lazyload Desteği)
+            img = film.find('img')
+            if img:
+                # data-src yoksa normal src'yi al
+                film_data['image'] = img.get('data-src') or img.get('src')
+
+            # Popover (Özet ve Detaylar)
+            # find_next_sibling yerine bazen aynı kapsayıcı içinde aramak daha güvenlidir
+            popover = film.find_next_sibling('div', class_='poster-popover')
+            if popover:
+                # Özet
+                desc = popover.find('p', class_='popover-description')
+                if desc:
+                    film_data['summary'] = desc.text.replace('Özet', '').strip()
                 
-                if 'kanal' in key:
-                    film_data['channel'] = value
-                elif 'türler' in key:
-                    film_data['genres'] = [g.strip() for g in value.split(',')]
-                elif 'kategori' in key:
-                    film_data['category'] = value
-    
-    films.append(film_data)
+                # Dinamik Meta Verileri (Tür, Kategori vb.)
+                for s in popover.find_all('span'):
+                    strong = s.find('strong')
+                    if strong:
+                        key_text = strong.text.strip().lower()
+                        # Strong etiketini temizleyip kalan metni değer olarak alıyoruz
+                        val_text = s.text.replace(strong.text, "").strip(": ")
+                        
+                        if 'türler' in key_text:
+                            film_data['genres'] = [g.strip() for g in val_text.split(',')]
+                        elif 'kategori' in key_text:
+                            film_data['category'] = val_text
+                        elif 'kanal' in key_text:
+                            film_data['channel'] = val_text
 
-# JSON olarak kaydet
+            films.append(film_data)
+        except Exception as e:
+            print(f"Bir film işlenirken hata oluştu: {e}")
+            continue
+
+    return films
+
+# --- Kayıt ve Çıktı ---
+extracted_films = parse_html(html_content) # html_content'in yukarıda tanımlı olduğunu varsayıyoruz
+
 with open('films.json', 'w', encoding='utf-8') as f:
-    json.dump(films, f, ensure_ascii=False, indent=2)
+    json.dump(extracted_films, f, ensure_ascii=False, indent=2)
 
-print(f"Toplam {len(films)} film bulundu.")
-print("Veriler 'films.json' dosyasına kaydedildi.")
-
-# İlk filmi göster
-if films:
-    print("\nİlk film bilgisi:")
-    print(json.dumps(films[0], ensure_ascii=False, indent=2))
+print(f"✅ Başarıyla {len(extracted_films)} film ayrıştırıldı.")
