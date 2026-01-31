@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 PAGES_TO_SCRAPE = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 DELAY_BETWEEN_FILMS = float(sys.argv[2]) if len(sys.argv) > 2 else 0.05  # Çok daha düşük
 
-BASE_URL = "https://www.hdfilmcehennemi.com"
+BASE_URL = "https://www.hdfilmcehennemi.nl"
 GITHUB_JSON_URL = "https://raw.githubusercontent.com/mehmetey03/metvvd/refs/heads/main/hdfilmcehennemi.json"
 
 # Daha agresif header ayarları
@@ -134,7 +134,7 @@ def process_film(film_info, filmler_data):
                     
                     if "rapidrame_id=" in raw_iframe_url:
                         rapid_id = raw_iframe_url.split("rapidrame_id=")[1]
-                        video_url = f"https://www.hdfilmcehennemi.com/rplayer/{rapid_id}"
+                        video_url = f"https://www.hdfilmcehennemi.nl/rplayer/{rapid_id}"
                     else:
                         video_url = raw_iframe_url
         except:
