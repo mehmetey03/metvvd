@@ -8,7 +8,7 @@ import re
 # AYARLAR
 # ============================================================================
 TARGET_BASE_URL = "https://www.hdfilmcehennemi.com"
-PROXY_URL = "https://api.codetabs.com/v1/proxy/?quest="
+PROXY_URL = "https://seep.eu.org/"
 PAGES_TO_SCRAPE = 3
 
 HEADERS = {
