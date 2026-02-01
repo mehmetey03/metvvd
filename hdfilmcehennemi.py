@@ -2,105 +2,84 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
-from datetime import datetime
 import urllib.parse
-import random
 
-# --- AYARLAR ---
-PAGES_TO_SCRAPE = 5
-BASE_URL = "https://www.hdfilmcehennemi.nl"
-# En stabil çalışan proxy'yi başa aldık
-PROXY_URL = "https://api.codetabs.com/v1/proxy/?quest="
-
-def scrape_optimized():
+def scrape_hd_film(max_pages=5):
     all_films = []
+    base_url = "https://www.hdfilmcehennemi.nl"
+    proxy_prefix = "https://api.codetabs.com/v1/proxy/?quest="
     
-    for page in range(1, PAGES_TO_SCRAPE + 1):
-        # --- URL OLUŞTURMA (Hassas Ayar) ---
-        if page == 1:
-            target_url = f"{BASE_URL}/"
-        else:
-            # Sitenin tam istediği yapı: sonu mutlaka "/" ile bitmeli
-            target_url = f"{BASE_URL}/sayfa/{page}/"
-            
-        full_proxy_url = PROXY_URL + urllib.parse.quote(target_url)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': base_url
+    }
+
+    for page in range(1, max_pages + 1):
+        # Sayfa 1 için ana dizin, diğerleri için /sayfa/X/ yapısı
+        target_path = "/" if page == 1 else f"/sayfa/{page}/"
+        full_url = proxy_prefix + urllib.parse.quote(base_url + target_path)
         
-        print(f"🔍 [{page}/{PAGES_TO_SCRAPE}] Çekiliyor: {target_url}")
+        print(f"📡 Sayfa {page} isteniyor...")
         
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36',
-                'Referer': BASE_URL + "/", # Siteyi "ana sayfadan geliyorum" diye ikna ediyoruz
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-            }
-            
-            # allow_redirects=True sayesinde yönlendirmeleri (301/302) takip ediyoruz
-            response = requests.get(full_proxy_url, headers=headers, timeout=20, allow_redirects=True)
-            
+            response = requests.get(full_url, headers=headers, timeout=15)
             if response.status_code != 200:
-                print(f"❌ Sayfa {page} hatası: {response.status_code}")
+                print(f"❌ Bağlantı hatası: {response.status_code}")
                 continue
-                
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # --- FİLM ELEMENTLERİNİ BULMA (Daha Geniş Kapsam) ---
-            # Sadece 'a.poster' değil, alternatifleri de tarayalım
-            film_elements = soup.find_all('a', class_='poster')
-            
-            if not film_elements:
-                # Alternatif: Sayfa 2+'da farklı bir yapı varsa
-                film_elements = soup.select('.poster-wrapper a') or soup.select('article a.poster')
 
-            page_films = []
-            for element in film_elements:
-                title_node = element.find('strong', class_='poster-title')
-                title = title_node.text.strip() if title_node else element.get('title', '').strip()
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Paylaştığın HTML'e göre en garanti seçim: 'a.poster'
+            posters = soup.find_all('a', class_='poster')
+            
+            page_data = []
+            for poster in posters:
+                # Başlık çekme (strong etiketinden veya title özniteliğinden)
+                title_tag = poster.find('strong', class_='poster-title')
+                title = title_tag.get_text(strip=True) if title_tag else poster.get('title', 'İsimsiz')
                 
-                if not title: continue
+                # Link çekme
+                link = poster.get('href', '')
                 
-                # Link
-                href = element.get('href', '')
-                link = f"{BASE_URL}{href}" if href.startswith('/') else href
-                
-                # Resim (Lazyload için data-src kontrolü kritik)
-                img = element.find('img')
+                # Resim çekme (Lazyload olduğu için data-src veya src)
+                img_tag = poster.find('img')
                 img_url = ""
-                if img:
-                    img_url = img.get('data-src') or img.get('src') or ""
-                    if img_url.startswith('/'): img_url = f"{BASE_URL}{img_url}"
-                
-                # IMDB ve Yıl
-                imdb = element.find('span', class_='imdb').text.strip() if element.find('span', class_='imdb') else "6.0"
-                meta = element.find('div', class_='poster-meta')
-                year = meta.find('span').text.strip() if meta and meta.find('span') else "2025"
+                if img_tag:
+                    img_url = img_tag.get('data-src') or img_tag.get('src') or ""
 
-                page_films.append({
-                    'title': title,
-                    'link': link,
-                    'image': img_url,
-                    'imdb': imdb,
-                    'year': year
+                # IMDB Puanı
+                imdb_tag = poster.find('span', class_='imdb')
+                imdb = imdb_tag.get_text(strip=True) if imdb_tag else "N/A"
+                
+                # Yıl (poster-meta içindeki ilk span)
+                meta_tag = poster.find('div', class_='poster-meta')
+                year = meta_tag.find('span').get_text(strip=True) if meta_tag else "2024"
+
+                page_data.append({
+                    "title": title,
+                    "link": link,
+                    "image": img_url,
+                    "imdb": imdb,
+                    "year": year
                 })
 
-            if page_films:
-                print(f"✅ Sayfa {page} başarılı: {len(page_films)} film bulundu.")
-                all_films.extend(page_films)
+            if page_data:
+                print(f"✅ Sayfa {page} bitti: {len(page_data)} film eklendi.")
+                all_films.extend(page_data)
             else:
-                print(f"⚠️ Sayfa {page} boş döndü. HTML yapısı farklı olabilir.")
-                # Hata analizi için sayfanın ilk 200 karakterini görelim
-                print(f"   İçerik özeti: {response.text[:100]}...")
+                print(f"⚠️ Sayfa {page}'de film bulunamadı (Seçici hatası olabilir).")
+            
+            # Siteyi yormamak ve bloklanmamak için kısa ara
+            time.sleep(1)
 
-            # --- BEKLEME (Anti-Bot) ---
-            time.sleep(random.uniform(1.5, 2.5))
-            
         except Exception as e:
-            print(f"❌ Hata: {e}")
-            
+            print(f"💥 Sayfa {page} işlenirken hata oluştu: {str(e)}")
+
     return all_films
 
-# --- ÇALIŞTIR VE KAYDET ---
-data = scrape_optimized()
-if data:
-    with open('hdfilmcehennemi.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"\n🏁 TOPLAM: {len(data)} film çekildi ve JSON kaydedildi.")
+# Çalıştır ve Kaydet
+results = scrape_hd_film(5)
+with open('filmler.json', 'w', encoding='utf-8') as f:
+    json.dump(results, f, ensure_ascii=False, indent=4)
+
+print(f"\n🏁 İşlem tamam! Toplam {len(results)} film kaydedildi.")
