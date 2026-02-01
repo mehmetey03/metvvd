@@ -3,325 +3,211 @@
     <html lang="tr">
     <head>
         <meta charset="UTF-8">
-        <title>METV Dev Arşiv</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>METV Arşiv</title>
         <style>
-            body { background: #0b0c10; color: white; font-family: sans-serif; margin: 0; }
-            .header { background: #1f2833; padding: 20px; text-align: center; border-bottom: 3px solid #66fcf1; position: sticky; top: 0; z-index: 100; }
+            body { background: #0b0c10; color: white; font-family: sans-serif; text-align: center; }
             .container { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; padding: 20px; }
-            .card { background: #15161a; border-radius: 8px; overflow: hidden; border: 1px solid #333; transition: 0.3s; position: relative; }
-            .card:hover { transform: translateY(-5px); border-color: #66fcf1; box-shadow: 0 5px 15px rgba(102, 252, 241, 0.2); }
-            .card img { width: 100%; height: 230px; object-fit: cover; }
-            .card-info { padding: 8px; text-align: center; font-size: 13px; }
-            .imdb { position: absolute; top: 5px; left: 5px; background: #f5c518; color: black; padding: 2px 5px; border-radius: 4px; font-weight: bold; font-size: 11px; }
-            #search { padding: 12px; width: 80%; max-width: 500px; border-radius: 25px; border: none; }
-            a { text-decoration: none; color: inherit; }
+            .card { background: #1f2833; border-radius: 10px; overflow: hidden; border: 1px solid #45a29e; transition: 0.3s; position: relative; }
+            .card:hover { transform: scale(1.05); }
+            .card img { width: 100%; height: 240px; object-fit: cover; }
+            .imdb { position: absolute; top: 5px; left: 5px; background: #f5c518; color: black; padding: 2px 5px; font-weight: bold; border-radius: 3px; font-size: 12px; }
+            a { text-decoration: none; color: white; }
         </style>
     </head>
     <body>
-        <div class="header">
-            <h1>🎬 METV FİLM ARŞİVİ</h1>
-            <input type="text" id="search" placeholder="Yüzlerce film içinde ara..." onkeyup="search()">
-            <p style="color: #66fcf1;">Toplam 32 Film Bulundu</p>
-        </div>
-        <div class="container" id="grid">
+        <h1>🎬 METV FİLM LİSTESİ</h1>
+        <p>Toplam 32 içerik listelendi.</p>
+        <div class="container">
     
             <a href="https://www.hdfilmcehennemi.nl/zootopia-2025-2-8/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/zootopia-2.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Zootropolis 2</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/zootopia-2.webp" alt="Zootropolis 2">
+                <div style="padding:10px; font-size:12px;">Zootropolis 2 (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/dizi/a-knight-of-the-seven-kingdoms/" target="_blank" class="card">
                 <div class="imdb">⭐ 8.3</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/a-knight-of-the-seven-kingdoms.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>A Knight of the Seven Kingdoms</strong><br>
-                    <span style="color: #888;">2026</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/a-knight-of-the-seven-kingdoms.webp" alt="A Knight of the Seven Kingdoms">
+                <div style="padding:10px; font-size:12px;">A Knight of the Seven Kingdoms (2026)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/five-nights-at-freddy-s-a2-1/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.2</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/five-nights-at-freddy-s-2.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Freddynin Pizza Dükkanında Beş Gece 2</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/five-nights-at-freddy-s-2.webp" alt="Freddynin Pizza Dükkanında Beş Gece 2">
+                <div style="padding:10px; font-size:12px;">Freddynin Pizza Dükkanında Beş Gece 2 (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/dizi/stranger-things-izle-733360/" target="_blank" class="card">
                 <div class="imdb">⭐ 8.6</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/stranger-things-izle.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Stranger Things</strong><br>
-                    <span style="color: #888;">2016</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/stranger-things-izle.webp" alt="Stranger Things">
+                <div style="padding:10px; font-size:12px;">Stranger Things (2016)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/nobody-2-2/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.3</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/nobody-2.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Önemsiz Biri 2</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/nobody-2.webp" alt="Önemsiz Biri 2">
+                <div style="padding:10px; font-size:12px;">Önemsiz Biri 2 (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/tron-ares-6/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.2</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/tron-ares.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>TRON Ares</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/tron-ares.webp" alt="TRON Ares">
+                <div style="padding:10px; font-size:12px;">TRON Ares (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/predator-badlands-8/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.3</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/predator-badlands.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Predator Vahşi Topraklar</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/predator-badlands.webp" alt="Predator Vahşi Topraklar">
+                <div style="padding:10px; font-size:12px;">Predator Vahşi Topraklar (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/the-conjuring-last-rites-5/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.2</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/the-conjuring-last-rites.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>The Conjuring Last Rites</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/the-conjuring-last-rites.webp" alt="The Conjuring Last Rites">
+                <div style="padding:10px; font-size:12px;">The Conjuring Last Rites (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/one-battle-after-another-3/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.8</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/one-battle-after-another.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Savaş Üstüne Savaş</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/one-battle-after-another.webp" alt="Savaş Üstüne Savaş">
+                <div style="padding:10px; font-size:12px;">Savaş Üstüne Savaş (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/frankenstein-2025-hdfc/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/frankenstein-2025-hdfc.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Frankenstein</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/frankenstein-2025-hdfc.webp" alt="Frankenstein">
+                <div style="padding:10px; font-size:12px;">Frankenstein (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/dizi/pluribus/" target="_blank" class="card">
                 <div class="imdb">⭐ 8.0</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/pluribus.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Pluribus</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/pluribus.webp" alt="Pluribus">
+                <div style="padding:10px; font-size:12px;">Pluribus (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/the-fantastic-four-first-steps-35/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.8</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/the-fantastic-four-first-steps.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Fantastik Dörtlü İlk Adımlar</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/the-fantastic-four-first-steps.webp" alt="Fantastik Dörtlü İlk Adımlar">
+                <div style="padding:10px; font-size:12px;">Fantastik Dörtlü İlk Adımlar (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/afterlight/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.3</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/afterlight.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Afterlight</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/afterlight.webp" alt="Afterlight">
+                <div style="padding:10px; font-size:12px;">Afterlight (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/hijacked-film-2025/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/hijacked.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Hijacked</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/hijacked.webp" alt="Hijacked">
+                <div style="padding:10px; font-size:12px;">Hijacked (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/lev-yashin-the-dream-goalkeeper/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.3</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/lev-yashin-the-dream-goalkeeper.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>The Black Spider - Lev Yashin Vratar moey mechty</strong><br>
-                    <span style="color: #888;">2019</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/lev-yashin-the-dream-goalkeeper.webp" alt="The Black Spider - Lev Yashin Vratar moey mechty">
+                <div style="padding:10px; font-size:12px;">The Black Spider - Lev Yashin Vratar moey mechty (2019)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/program-2025/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.2</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/program.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Program</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/program.webp" alt="Program">
+                <div style="padding:10px; font-size:12px;">Program (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/grizzly-night/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.4</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/grizzly-night.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Grizzly Night</strong><br>
-                    <span style="color: #888;">2026</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/grizzly-night.webp" alt="Grizzly Night">
+                <div style="padding:10px; font-size:12px;">Grizzly Night (2026)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/strange-abandoned-deranged/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/strange-abandoned-deranged.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Hiçbir Şey Normal Değil</strong><br>
-                    <span style="color: #888;">2024</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/strange-abandoned-deranged.webp" alt="Hiçbir Şey Normal Değil">
+                <div style="padding:10px; font-size:12px;">Hiçbir Şey Normal Değil (2024)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/96-minutes/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.9</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/96-minutes.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>96 Minutes</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/96-minutes.webp" alt="96 Minutes">
+                <div style="padding:10px; font-size:12px;">96 Minutes (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/a-letter-to-my-youth/" target="_blank" class="card">
                 <div class="imdb">⭐ 0.0</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/a-letter-to-my-youth.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>A Letter to My Youth</strong><br>
-                    <span style="color: #888;">2026</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/a-letter-to-my-youth.webp" alt="A Letter to My Youth">
+                <div style="padding:10px; font-size:12px;">A Letter to My Youth (2026)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/memory-of-water/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.1</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/memory-of-water.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Memory of Water</strong><br>
-                    <span style="color: #888;">2022</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/memory-of-water.webp" alt="Memory of Water">
+                <div style="padding:10px; font-size:12px;">Memory of Water (2022)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/red-stone-5/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.0</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/red-stone.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Red Stone</strong><br>
-                    <span style="color: #888;">2021</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/red-stone.webp" alt="Red Stone">
+                <div style="padding:10px; font-size:12px;">Red Stone (2021)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/silent-night-deadly-night/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.4</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/silent-night-deadly-night.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Sessiz Gece Kanlı Gece</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/silent-night-deadly-night.webp" alt="Sessiz Gece Kanlı Gece">
+                <div style="padding:10px; font-size:12px;">Sessiz Gece Kanlı Gece (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/anaconda-2025-hdfc-4/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.9</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/anaconda-hdfc.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Anakonda</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/anaconda-hdfc.webp" alt="Anakonda">
+                <div style="padding:10px; font-size:12px;">Anakonda (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/primavera/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.3</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/primavera.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Primavera</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/primavera.webp" alt="Primavera">
+                <div style="padding:10px; font-size:12px;">Primavera (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/zootopia-2025-2-8/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/zootopia-2.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Zootropolis 2</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/zootopia-2.webp" alt="Zootropolis 2">
+                <div style="padding:10px; font-size:12px;">Zootropolis 2 (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/ella-mccay/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.0</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/ella-mccay.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Ella McCay</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/ella-mccay.webp" alt="Ella McCay">
+                <div style="padding:10px; font-size:12px;">Ella McCay (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/untitled-home-invasion-romance/" target="_blank" class="card">
                 <div class="imdb">⭐ 5.6</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/untitled-home-invasion-romance.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Untitled Home Invasion Romance</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/untitled-home-invasion-romance.webp" alt="Untitled Home Invasion Romance">
+                <div style="padding:10px; font-size:12px;">Untitled Home Invasion Romance (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/david-film-2025/" target="_blank" class="card">
                 <div class="imdb">⭐ 7.2</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/david.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>David</strong><br>
-                    <span style="color: #888;">2025</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/david.webp" alt="David">
+                <div style="padding:10px; font-size:12px;">David (2025)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/hold-still/" target="_blank" class="card">
                 <div class="imdb">⭐ 8.4</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/hold-still.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Dargeçit</strong><br>
-                    <span style="color: #888;">2024</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/hold-still.webp" alt="Dargeçit">
+                <div style="padding:10px; font-size:12px;">Dargeçit (2024)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/the-hypnosis/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/the-hypnosis.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>The Hypnosis - Hipnoz</strong><br>
-                    <span style="color: #888;">2024</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/the-hypnosis.webp" alt="The Hypnosis - Hipnoz">
+                <div style="padding:10px; font-size:12px;">The Hypnosis - Hipnoz (2024)</div>
             </a>
         
             <a href="https://www.hdfilmcehennemi.nl/cloud-2024/" target="_blank" class="card">
                 <div class="imdb">⭐ 6.5</div>
-                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/cloud.webp" loading="lazy">
-                <div class="card-info">
-                    <strong>Bulut</strong><br>
-                    <span style="color: #888;">2024</span>
-                </div>
+                <img src="https://www.hdfilmcehennemi.nl/images/list/poster/cloud.webp" alt="Bulut">
+                <div style="padding:10px; font-size:12px;">Bulut (2024)</div>
             </a>
-        
-        </div>
-        <script>
-            function search() {
-                let val = document.getElementById('search').value.toLowerCase();
-                document.querySelectorAll('.card').forEach(c => {
-                    c.style.display = c.innerText.toLowerCase().includes(val) ? "" : "none";
-                });
-            }
-        </script>
-    </body></html>
-    
+        </div></body></html>
