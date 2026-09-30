@@ -4,6 +4,7 @@ import json
 import time
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- AYARLAR ---
 JSON_SOURCE_URL = "https://raw.githubusercontent.com/mehmetey03/metvvd/refs/heads/main/nowtv_data.json"
@@ -13,7 +14,6 @@ BRADMAX_PLAYER = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c
 def get_single_m3u8(scraper, url):
     """Eksik kalan tekil sayfalardan m3u8 çeker."""
     try:
-        time.sleep(0.3)
         r = scraper.get(url, timeout=10)
         match = re.search(r'https?://[^\s"\'\\,]+\.m3u8[^\s"\'\\,]*', r.text)
         if match:
@@ -21,6 +21,20 @@ def get_single_m3u8(scraper, url):
         return url
     except:
         return url
+
+def process_option(scraper, opt, unique_m3u8s, index):
+    """Her bir bölümü paralel olarak işler."""
+    b_title = opt.get_text(strip=True)
+    b_target = opt['data-target']
+    
+    # Önce listede sıradaki m3u8 var mı bak
+    link = unique_m3u8s[index] if index < len(unique_m3u8s) else b_target
+    
+    # EĞER hala m3u8 değilse, o sayfanın içine gir ve derin tarama yap
+    if ".m3u8" not in link:
+        link = get_single_m3u8(scraper, b_target)
+        
+    return index, {"ad": b_title, "link": link}
 
 def commit_and_push(file_name):
     print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
@@ -30,14 +44,14 @@ def commit_and_push(file_name):
         subprocess.run(["git", "add", "."], check=True)
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
         if status:
-            subprocess.run(["git", "commit", "-m", "🔄 NOW TV VOD: Full M3U8 Integration"], check=True)
+            subprocess.run(["git", "commit", -1 if False else ["-m", "🔄 NOW TV VOD: Full M3U8 Integration (Optimized)"]], check=True)
             subprocess.run(["git", "push", "--force"], check=True)
             print("🚀 GitHub'a başarıyla yüklendi!")
     except Exception as e:
         print(f"❌ Git Hatası: {e}")
 
 def run_scraper():
-    print("🚀 Bot Başlatıldı. Derinlemesine M3U8 taraması yapılıyor...")
+    print("🚀 Bot Başlatıldı. Paralel ve hızlı M3U8 taraması yapılıyor...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
     try:
@@ -65,27 +79,25 @@ def run_scraper():
             unique_m3u8s = list(dict.fromkeys(found_m3u8s))
 
             b_soup = BeautifulSoup(response.text, 'html.parser')
-            eps = []
-            
             select_box = b_soup.find('select', id='video-finder-changer')
+            
             if select_box:
                 options = select_box.find_all('option', {'data-target': True})
-                print(f"({len(options)} Bölüm)")
+                print(f"({len(options)} Bölüm - Paralel işleniyor)")
                 
-                for i, opt in enumerate(options):
-                    b_title = opt.get_text(strip=True)
-                    b_target = opt['data-target']
-                    
-                    # Önce listede sıradaki m3u8 var mı bak
-                    link = unique_m3u8s[i] if i < len(unique_m3u8s) else b_target
-                    
-                    # EĞER hala m3u8 değilse, o sayfanın içine gir ve zorla al (Deep Scan)
-                    if ".m3u8" not in link:
-                        print(f"   ⚠️ {b_title} için derin tarama yapılıyor...")
-                        link = get_single_m3u8(scraper, b_target)
-                    
-                    eps.append({"ad": b_title, "link": link})
+                eps_unsorted = [None] * len(options)
                 
+                # ThreadPoolExecutor ile aynı anda 10 istek atarak süreci hızlandırıyoruz
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [
+                        executor.submit(process_option, scraper, opt, unique_m3u8s, i)
+                        for i, opt in enumerate(options)
+                    ]
+                    for future in as_completed(futures):
+                        idx, ep_data = future.result()
+                        eps_unsorted[idx] = ep_data
+                
+                eps = [ep for ep in eps_unsorted if ep is not None]
                 print(f"   ✅ {title} tamamlandı.")
 
             if eps:
