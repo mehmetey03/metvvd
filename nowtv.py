@@ -39,16 +39,27 @@ def process_option(scraper, opt, unique_m3u8s, index):
 def commit_and_push(file_name):
     print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
     try:
+        # Git kimlik ayarları
         subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-        subprocess.run(["git", "add", "."], check=True)
+        
+        # Değişiklikleri ekle
+        subprocess.run(["git", "add", file_name], check=True)
+        
+        # Değişiklik var mı kontrol et
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
-        if status:
-            subprocess.run(["git", "commit", -1 if False else ["-m", "🔄 NOW TV VOD: Full M3U8 Integration (Optimized)"]], check=True)
-            subprocess.run(["git", "push", "--force"], check=True)
+        print(f"Git Durumu:\n{status}")
+        
+        if status.strip():
+            # DÜZELTME: Commit mesajındaki bozuk yapı düzeltildi
+            subprocess.run(["git", "commit", "-m", f"🔄 NOW TV VOD: Full M3U8 Integration ({time.strftime('%Y-%m-%d %H:%M:%S')})"], check=True)
+            subprocess.run(["git", "push"], check=True)
             print("🚀 GitHub'a başarıyla yüklendi!")
+        else:
+            print("⚠️ Gönderilecek yeni değişiklik bulunamadı.")
+            
     except Exception as e:
-        print(f"❌ Git Hatası: {e}")
+        print(f"❌ Git Hatası Detayı: {e}")
 
 def run_scraper():
     print("🚀 Bot Başlatıldı. Paralel ve hızlı M3U8 taraması yapılıyor...")
