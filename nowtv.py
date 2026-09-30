@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 import json
 import time
 import re
-import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- AYARLAR ---
@@ -21,7 +20,7 @@ def get_single_m3u8(scraper, url):
         if match:
             return match.group(0).replace('\\/', '/')
             
-        # 2. Yöntem: Sayfa içindeki script tagleri arasında bradmax veya medya URL'si ara
+        # 2. Yöntem: Sayfa içindeki script tagleri arasında m3u8/media ara
         matches = re.findall(r'https?://[^\s"\'\\,]+(?:m3u8|playlist|media)[^\s"\'\\,]*', r.text, re.IGNORECASE)
         for m in matches:
             if '.m3u8' in m:
@@ -41,42 +40,15 @@ def process_option(scraper, opt, unique_m3u8s, index):
     b_title = opt.get_text(strip=True)
     b_target = opt.get('data-target', '')
     
-    # Eğer data-target göreceli ise tabanı ekle
     if b_target and not b_target.startswith('http'):
         b_target = BASE_URL + b_target if b_target.startswith('/') else BASE_URL + '/' + b_target
     
-    # Önce listede sıradaki m3u8 var mı bak
     link = unique_m3u8s[index] if index < len(unique_m3u8s) else b_target
     
-    # EĞER hala m3u8 değilse, o sayfanın içine gir ve derin tarama yap
     if ".m3u8" not in link and b_target:
         link = get_single_m3u8(scraper, b_target)
         
     return index, {"ad": b_title, "link": link}
-
-def commit_and_push(file_name):
-    print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
-    try:
-        subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-        subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-        
-        # Değişiklikleri zorla ekle
-        subprocess.run(["git", "add", "-A"], check=True)
-        
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
-        print(f"Git Durumu:\n{status}")
-        
-        # Her koşulda commit atılmasını tetikle (Değişiklik olmasa bile veya tarih damgasıyla)
-        subprocess.run(["git", "commit", "-m", f"🔄 NOW TV VOD Update: {time.strftime('%Y-%m-%d %H:%M:%S')}"], check=False)
-        
-        push_res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True)
-        if push_res.returncode != 0:
-            # Alternatif push denemesi
-            subprocess.run(["git", "push", "--force"], check=True)
-            
-        print("🚀 GitHub'a başarıyla yüklendi!")
-    except Exception as e:
-        print(f"❌ Git Hatası Detayı: {e}")
 
 def run_scraper():
     print("🚀 Bot Başlatıldı. Gelişmiş M3U8 taraması yapılıyor...")
@@ -226,7 +198,7 @@ def create_html(series_data):
 
     with open(file_name, "w", encoding="utf-8") as f:
         f.write(html_template)
-    commit_and_push(file_name)
+    print(f"💾 {file_name} başarıyla oluşturuldu.")
 
 if __name__ == "__main__":
     run_scraper()
