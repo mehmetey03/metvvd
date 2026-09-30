@@ -2,8 +2,8 @@ name: NowTV Arşiv Güncelleyici
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Her gece 00:00'da çalışır
-  workflow_dispatch: # Manuel çalıştırma butonu ekler
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -30,6 +30,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add nowtv_vod.html
-          # Değişiklik yoksa hata vermemesi için "|| exit 0" ekledik
-          git commit -m "🔄 Otomatik Arşiv Güncellemesi: $(date +'%d-%m-%Y %H:%M')" || exit 0
-          git push
+          git commit -m "🔄 Otomatik Arşiv Güncellemesi: $(date +'%d-%m-%Y %H:%M')" || echo "Değişiklik yok"
+          git push origin main || git push --force
