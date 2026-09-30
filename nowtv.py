@@ -12,12 +12,26 @@ BASE_URL = "https://www.nowtv.com.tr"
 BRADMAX_PLAYER = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl="
 
 def get_single_m3u8(scraper, url):
-    """Eksik kalan tekil sayfalardan m3u8 çeker."""
+    """Tekil bölüm sayfasından dinamik veya statik m3u8 adresini yakalar."""
     try:
         r = scraper.get(url, timeout=10)
+        
+        # 1. Yöntem: Sayfa kaynağında direkt m3u8 ara
         match = re.search(r'https?://[^\s"\'\\,]+\.m3u8[^\s"\'\\,]*', r.text)
         if match:
             return match.group(0).replace('\\/', '/')
+            
+        # 2. Yöntem: Sayfa içindeki script tagleri arasında bradmax veya medya URL'si ara
+        matches = re.findall(r'https?://[^\s"\'\\,]+(?:m3u8|playlist|media)[^\s"\'\\,]*', r.text, re.IGNORECASE)
+        for m in matches:
+            if '.m3u8' in m:
+                return m.replace('\\/', '/')
+                
+        # 3. Yöntem: Sayfa içindeki json/config yapılarını tara
+        json_matches = re.findall(r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
+        if json_matches:
+            return json_matches[0].replace('\\/', '/')
+            
         return url
     except:
         return url
@@ -25,13 +39,17 @@ def get_single_m3u8(scraper, url):
 def process_option(scraper, opt, unique_m3u8s, index):
     """Her bir bölümü paralel olarak işler."""
     b_title = opt.get_text(strip=True)
-    b_target = opt['data-target']
+    b_target = opt.get('data-target', '')
+    
+    # Eğer data-target göreceli ise tabanı ekle
+    if b_target and not b_target.startswith('http'):
+        b_target = BASE_URL + b_target if b_target.startswith('/') else BASE_URL + '/' + b_target
     
     # Önce listede sıradaki m3u8 var mı bak
     link = unique_m3u8s[index] if index < len(unique_m3u8s) else b_target
     
     # EĞER hala m3u8 değilse, o sayfanın içine gir ve derin tarama yap
-    if ".m3u8" not in link:
+    if ".m3u8" not in link and b_target:
         link = get_single_m3u8(scraper, b_target)
         
     return index, {"ad": b_title, "link": link}
@@ -39,30 +57,29 @@ def process_option(scraper, opt, unique_m3u8s, index):
 def commit_and_push(file_name):
     print(f"\n📤 {file_name} GitHub'a gönderiliyor...")
     try:
-        # Git kimlik ayarları
         subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
         subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
         
-        # Değişiklikleri ekle
-        subprocess.run(["git", "add", file_name], check=True)
+        # Değişiklikleri zorla ekle
+        subprocess.run(["git", "add", "-A"], check=True)
         
-        # Değişiklik var mı kontrol et
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
         print(f"Git Durumu:\n{status}")
         
-        if status.strip():
-            # DÜZELTME: Commit mesajındaki bozuk yapı düzeltildi
-            subprocess.run(["git", "commit", "-m", f"🔄 NOW TV VOD: Full M3U8 Integration ({time.strftime('%Y-%m-%d %H:%M:%S')})"], check=True)
-            subprocess.run(["git", "push"], check=True)
-            print("🚀 GitHub'a başarıyla yüklendi!")
-        else:
-            print("⚠️ Gönderilecek yeni değişiklik bulunamadı.")
+        # Her koşulda commit atılmasını tetikle (Değişiklik olmasa bile veya tarih damgasıyla)
+        subprocess.run(["git", "commit", "-m", f"🔄 NOW TV VOD Update: {time.strftime('%Y-%m-%d %H:%M:%S')}"], check=False)
+        
+        push_res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True)
+        if push_res.returncode != 0:
+            # Alternatif push denemesi
+            subprocess.run(["git", "push", "--force"], check=True)
             
+        print("🚀 GitHub'a başarıyla yüklendi!")
     except Exception as e:
         print(f"❌ Git Hatası Detayı: {e}")
 
 def run_scraper():
-    print("🚀 Bot Başlatıldı. Paralel ve hızlı M3U8 taraması yapılıyor...")
+    print("🚀 Bot Başlatıldı. Gelişmiş M3U8 taraması yapılıyor...")
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
     try:
@@ -84,7 +101,6 @@ def run_scraper():
         
         try:
             response = scraper.get(bolumler_url, timeout=10)
-            # Sayfadaki mevcut tüm m3u8'leri al
             found_m3u8s = re.findall(r'https?://[^\s"\'\\,]+\.m3u8[^\s"\'\\,]*', response.text)
             found_m3u8s = [m.replace('\\/', '/') for m in found_m3u8s]
             unique_m3u8s = list(dict.fromkeys(found_m3u8s))
@@ -92,14 +108,13 @@ def run_scraper():
             b_soup = BeautifulSoup(response.text, 'html.parser')
             select_box = b_soup.find('select', id='video-finder-changer')
             
+            eps = []
             if select_box:
                 options = select_box.find_all('option', {'data-target': True})
-                print(f"({len(options)} Bölüm - Paralel işleniyor)")
+                print(f"({len(options)} Bölüm - Paralel taranıyor)")
                 
                 eps_unsorted = [None] * len(options)
-                
-                # ThreadPoolExecutor ile aynı anda 10 istek atarak süreci hızlandırıyoruz
-                with ThreadPoolExecutor(max_workers=10) as executor:
+                with ThreadPoolExecutor(max_workers=8) as executor:
                     futures = [
                         executor.submit(process_option, scraper, opt, unique_m3u8s, i)
                         for i, opt in enumerate(options)
