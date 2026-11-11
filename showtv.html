@@ -4,8 +4,10 @@
     <title>ME TV YERLİ VOD</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css?family=PT+Sans:700i" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://kit.fontawesome.com/bbe955c5ed.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js"></script>
     <style>
         *:not(input):not(textarea) { user-select: none }
         body { margin: 0; padding: 0; background: #00040d; font-family: sans-serif; font-size: 15px; overflow-x: hidden; }
@@ -13,49 +15,68 @@
         .baslik { width: 96%; color: #fff; padding: 15px 10px; box-sizing: border-box; }
         .filmpanel { width: 12%; height: 200px; background: #15161a; float: left; margin: 1.14%;
             color: #fff; border-radius: 15px; box-sizing: border-box;
-            border: 1px solid #323442; overflow: hidden; transition: 0.3s; cursor: pointer; position: relative; }
-        .filmisimpanel { width: 100%; height: 200px; position: absolute; bottom: 0; left: 0;
+            box-shadow: 1px 5px 10px rgba(0,0,0,0.1); border: 1px solid #323442; padding: 0px;
+            overflow: hidden; transition: 0.3s; cursor: pointer; }
+        .filmisimpanel { width: 100%; height: 200px; position: relative; margin-top: -200px;
             background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 100%); }
-        .filmpanel:hover { border: 3px solid #572aa7; box-shadow: 0 0 10px rgba(87,42,167,0.5); }
-        .filmresim { width: 100%; height: 100%; overflow: hidden; }
-        .filmresim img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+        .filmpanel:hover { color: #fff; border: 3px solid #572aa7; box-shadow: 0 0 10px rgba(87,42,167,0.5); }
+        .filmresim { width: 100%; height: 100%; margin-bottom: 0px; overflow: hidden; position: relative; }
+        .filmresim img { width: 100%; height: 100%; transition: transform 0.4s ease; object-fit: cover; }
         .filmpanel:hover .filmresim img { transform: scale(1.1); }
-        .filmisim { width: 100%; font-size: 14px; white-space: nowrap; overflow: hidden;
-            text-overflow: ellipsis; padding: 0 5px; box-sizing: border-box;
-            position: absolute; bottom: 5px; }
+        .filmisim { width: 100%; font-size: 14px; text-decoration: none; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; padding: 0px 5px; box-sizing: border-box;
+            color: #fff; position: absolute; bottom: 5px; }
         .aramapanel { width: 100%; height: 60px; background: #15161a; border-bottom: 1px solid #323442;
-            padding: 10px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center;}
-        .logoisim { font-size: 20px; font-weight: bold; color: #fff; margin-left: 10px; }
-        .aramapanelyazi { height: 40px; width: 200px; padding: 0 10px; border: 1px solid #ccc; }
-        .aramapanelbuton { height: 40px; width: 60px; background: #572aa7; color: #fff; border: none; cursor: pointer; }
+            margin: 0px auto; padding: 10px; box-sizing: border-box; overflow: hidden; z-index: 11111; }
+        .aramapanelsag { width: auto; height: 40px; box-sizing: border-box; overflow: hidden; float: right; }
+        .aramapanelsol { width: 50%; height: 40px; box-sizing: border-box; overflow: hidden; float: left; }
+        .aramapanelyazi { height: 40px; width: 120px; border: 1px solid #ccc; box-sizing: border-box;
+            padding: 0px 10px; color: #000; margin: 0px 5px; }
+        .aramapanelbuton { height: 40px; width: 40px; text-align: center; background-color: #572aa7;
+            border: none; color: #fff; box-sizing: border-box; overflow: hidden; float: right; transition: .35s; }
+        .aramapanelbuton:hover { background-color: #fff; color: #000; }
+        .logo { width: 40px; height: 40px; float: left; }
+        .logo img { width: 100%; }
+        .logoisim { font-size: 15px; width: 70%; height: 40px; line-height: 40px; font-weight: 500; color: #fff; }
         .hidden { display: none; }
-        .bolum-container { background: #15161a; padding: 10px; margin-top: 10px; }
-        .geri-btn { background: #572aa7; color: white; padding: 10px; width: 100px; text-align: center;
-            cursor: pointer; margin-bottom: 10px; border-radius: 5px; }
+        .bolum-container { background: #15161a; padding: 10px; margin-top: 10px; border-radius: 5px; }
+        .geri-btn { background: #572aa7; color: white; padding: 10px; text-align: center;
+            border-radius: 5px; cursor: pointer; margin-top: 10px; margin-bottom: 10px;
+            display: none; width: 100px; }
+        .geri-btn:hover { background: #6b3ec7; transition: background 0.3s; }
         .playerpanel { width: 100%; height: 100vh; position: fixed; top: 0; left: 0;
-            background: #0a0e17; z-index: 9999; display: none; flex-direction: column; }
-        #main-player { width: 100%; height: 100%; }
+            background: #0a0e17; z-index: 9999; display: none; flex-direction: column; overflow: hidden; }
+        #main-player { width: 100%; height: 100%; background: #000; }
         #bradmax-iframe { width: 100%; height: 100%; border: none; }
-        .player-geri-btn { background: #572aa7; color: white; padding: 10px; width: 100px; position: absolute; top: 10px; left: 10px; z-index: 10000; cursor: pointer;}
-        @media(max-width:550px) { .filmpanel { width: 31.33%; height: 180px; margin: 1%; } }
+        .player-geri-btn { background: #572aa7; color: white; padding: 10px; text-align: center;
+            border-radius: 5px; cursor: pointer; margin: 10px; width: 100px; position: absolute;
+            top: 10px; left: 10px; z-index: 10000; }
+        .hataekran i { color: #572aa7; font-size: 80px; text-align: center; width: 100%; }
+        .hataekran { width: 80%; margin: 20px auto; color: #fff; background: #15161a;
+            border: 1px solid #323442; padding: 10px; box-sizing: border-box; border-radius: 10px; }
+        .hatayazi { color: #fff; font-size: 15px; text-align: center; width: 100%; margin: 20px 0px; }
+        @media(max-width:550px) {
+            .filmpanel { width: 31.33%; height: 190px; margin: 1%; }
+            #main-player { height: 100%; }
+        }
     </style>
 </head>
 <body>
     <div class="aramapanel">
-        <div style="display:flex; align-items:center;">
-            <img src="https://i.hizliresim.com/t6e66bt.png" style="width: 40px;">
+        <div class="aramapanelsol">
+            <div class="logo"><img src="https://i.hizliresim.com/t6e66bt.png"></div>
             <div class="logoisim">ME TV</div>
         </div>
-        <div>
-            <form onsubmit="return searchSeries()">
-                <input type="text" id="seriesSearch" placeholder="Dizi Ara..." class="aramapanelyazi" oninput="resetSeriesSearch()">
+        <div class="aramapanelsag">
+            <form action="" name="ara" method="GET" onsubmit="return searchSeries()">
+                <input type="text" id="seriesSearch" placeholder="Dizi Adını Giriniz..!" class="aramapanelyazi" oninput="resetSeriesSearch()">
                 <input type="submit" value="ARA" class="aramapanelbuton">
             </form>
         </div>
     </div>
 
     <div class="filmpaneldis" id="diziListesiContainer">
-        <div class="baslik">TÜM DİZİLER</div>
+        <div class="baslik">SHOWTV DİZİLERİ</div>
     </div>
 
     <div id="bolumler" class="bolum-container hidden">
@@ -71,7 +92,8 @@
     <script>
         const BRADMAX_BASE_URL = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
         const BRADMAX_PARAMS = "&autoplay=true&fs=true";
-        var diziler = {"sevdanbirates": {"isim": "Sevdan Bir Ateş", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/sevdan-bir-ates.jpg", "bolumler": [{"ad": "1. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/10/0871ED094D1733AB93679DA472CBB1C1.m3u8"}, {"ad": "2. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/16/EB8BA9C9EFD4B12995DA6ECE506F98E0.m3u8"}, {"ad": "3. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/24/87D5B1BC099CF4FA663D5CB45E680A44.m3u8"}, {"ad": "4. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/01/0C07E8898606B3631688A32895FEC564.m3u8"}, {"ad": "5. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/07/B30086B5BB715D3EA5F22DEFFFB41C65.m3u8"}, {"ad": "6. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/14/A8C2AC9A25DDC871ADE0BB9BB0595A20.m3u8"}, {"ad": "7. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/21/62CB6084551DCB4F15733060BC30B502.m3u8"}, {"ad": "8. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/28/01418A5689B618D9BA980AE927ECD0EC.m3u8"}, {"ad": "9. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/04/14AAECC810C3680854C36FB1E2278E83.m3u8"}, {"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "kizilcikserbeti": {"isim": "Kızılcık Şerbeti", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/kizilcik-serbeti.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "136. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/05/09/41DFA379BF2B9CAA290DF8FBF4FB1966.m3u8"}, {"ad": "137. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/05/15/9560DA2C8BDC481648C41C4012FB6075.m3u8"}, {"ad": "138. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/05/22/B24B5C7EC8679C420934BE37BD57892E.m3u8"}, {"ad": "139. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/18/EE7E739C283DB677DA952AEBDBECCD78.m3u8"}, {"ad": "140. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/29/91E8EAABE0D7CCACCEBA41554532F370.m3u8"}, {"ad": "141. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/07/5459398F39D004672EBF8EBA40EEFA53.m3u8"}, {"ad": "142. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/09/6B5BD936748666C1383F1EF787B9B9CF.m3u8"}, {"ad": "143. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/16/7469E3DC712C6F5B52D1E91163AB5512.m3u8"}, {"ad": "144. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/23/D89AC53F64E17DA9D61A1A39B6B44437.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "muhtemelask": {"isim": "Muhtemel Aşk", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/muhtemel-ask.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "11. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/08/27/2FDF04BFEA6A0452769FE50B1A88A801.m3u8"}, {"ad": "12. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/03/070D7829C1D067C98884D3C9986155BE.m3u8"}, {"ad": "13. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/10/9273FF91555139DA399B34125A59C5E6.m3u8"}, {"ad": "14. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/17/7A73CF815507B1252AD750F42F5A7255.m3u8"}, {"ad": "15. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/09/24/9A72CA80D2A54D266D584FB8460E5A69.m3u8"}, {"ad": "16. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/01/09CC0B067B42D9F8A87A90181F2484A8.m3u8"}, {"ad": "17. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/08/DB89187154C45ED2312DCE90012730EE.m3u8"}, {"ad": "18. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/15/F110C089817BFA3711F7761F200235F2.m3u8"}, {"ad": "19. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/10/22/E3D94217D61051225BD8BDFAB969FE40.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "menekse": {"isim": "Menekşe", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/menekse.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "cevher": {"isim": "Cevher", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/cevher.jpg", "bolumler": [{"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "veliaht": {"isim": "Veliaht", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/veliaht.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "17. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/01/16/A4F66A84D06FBF8BD1CC61860AE637A8.m3u8"}, {"ad": "18. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/01/23/6F05B995D789B97E09B41FFC10583435.m3u8"}, {"ad": "19. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/01/30/5D06BC3C203C25DCBAC0D5D7D1681061.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/02/06/FEFD8FE884A6B431BB4A190C99B80C4B.m3u8"}, {"ad": "21. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/02/13/F5BE01FFB5DB12EC9752BB78C9238575.m3u8"}, {"ad": "22. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/02/20/B5CC72F2B5E7586934EF7537C2C4B423.m3u8"}, {"ad": "23. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/02/27/631F2D0851430DCF62CC437DF61FA5C5.m3u8"}, {"ad": "24. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/03/06/49FB2C89F9803B0265FE7A6B01988761.m3u8"}, {"ad": "25. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/03/13/5F40163EC7F20F16FB3E9898AB153588.m3u8"}, {"ad": "26. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/03/26/9D393554DCCA3347AC7EAAF04365EE92.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "bahar": {"isim": "Bahar", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/bahar.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "55. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/10/24/E43EB94700D1E33C0A418953F6C96AD4.m3u8"}, {"ad": "56. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/10/29/6B1CC416DC3A16FF5C9D914E35FE73B3.m3u8"}, {"ad": "57. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/11/05/941C3E7B87FB9A9F59CB1DB1C729D7F3.m3u8"}, {"ad": "58. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/11/12/86161E643569D48819FA1B1E8BA52F0B.m3u8"}, {"ad": "59. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/11/18/4D18F6AFE5AC956B224D4E5D940E66CA.m3u8"}, {"ad": "60. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/11/26/441DD338866556DD7CA474F2FC36D864.m3u8"}, {"ad": "61. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/12/07/BB7AD2693DB20D70098E96B0B01F867F.m3u8"}, {"ad": "62. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/12/14/15E8F53D7287285638EC4EBF41A1FA57.m3u8"}, {"ad": "63. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/12/22/7C445664D3C25A13B0A1542D4B0E2D2B.m3u8"}, {"ad": "64. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/12/29/76F5FE14C84D724C5FEDD46394A79052.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "cukur": {"isim": "Çukur", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/cukur.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "122. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/04/05/71EFFBF46D2D60FFD972CCD8BC98181F.m3u8"}, {"ad": "123. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/04/05/65A2527AFE6CBF10F0E5EFC6B5A27BF9.m3u8"}, {"ad": "124. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/04/19/19397CDE21734029A2F76C7C0C45AEE5.m3u8"}, {"ad": "125. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/04/27/880BCB0B89966A641A1096F12DA82245.m3u8"}, {"ad": "126. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/05/03/30F6AC93CDE51B7779CB6CE5D47EFD43.m3u8"}, {"ad": "127. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/05/03/1BEF6B9ECF28EC161A3D4CC1D7907787.m3u8"}, {"ad": "128. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/05/11/4722C6FD5CFCFCA1CB3AB7AA106DFC00.m3u8"}, {"ad": "129. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/05/31/CE56F69E51BF24FDC09BF0C04F7CF366.m3u8"}, {"ad": "130. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/06/07/4EDA289222D9629E34A1A3721F12AD7B.m3u8"}, {"ad": "131. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2021/06/15/01AF8FAE48C770E0F28B6928378CD5FC.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "icerde": {"isim": "İçerde", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/icerde.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "30. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/20/6E881D166CFD1718B4D18954D59CE4A5.m3u8"}, {"ad": "31. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/7373E2B6400800D74DCD3DDDD660EB9A.m3u8"}, {"ad": "32. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/70C1C822D3112D6115E56784732E8846.m3u8"}, {"ad": "33. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/5B37721DDB5CE8521B1CDD8C313F77BA.m3u8"}, {"ad": "34. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/B9DF823E21D63D7FD29E30024A25047B.m3u8"}, {"ad": "35. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/6713069F34227B13FE029D7D1AE0BBC8.m3u8"}, {"ad": "36. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/A709796589A01780E9FFE8055A9A41A2.m3u8"}, {"ad": "37. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/E2CF556BF9A802DD9A742CA813B24849.m3u8"}, {"ad": "38. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/8336C36A2102E82BD96E17EA80761185.m3u8"}, {"ad": "39. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2024/06/21/705DBBB1FEE692FD643951AC57AF0AA7.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "siyahkalp": {"isim": "Siyah Kalp", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/siyah-kalp.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "25. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/03/20/5EB764005E5C03EAC89013C1B5C8832D.m3u8"}, {"ad": "26. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/03/27/98F532E246ACD201C660F3A83A21E43B.m3u8"}, {"ad": "27. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/04/10/5C8366A96E5464BF30DF0823B9D5D367.m3u8"}, {"ad": "28. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/04/17/8AE61DD226CB56826827B9F9F3C72680.m3u8"}, {"ad": "29. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/04/25/C141A3DB1F1BC1105A3325AD44CC5C02.m3u8"}, {"ad": "30. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/01/6CF7261BA9D0B639A196CE48849E84EB.m3u8"}, {"ad": "31. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/08/975EDEA4BCCBBDE91F56D39179EA4CE5.m3u8"}, {"ad": "32. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/15/3F672A79172F3E54E63C648ADE9E3317.m3u8"}, {"ad": "33. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/22/8EE828F1DA7666F8D929B418DB07FF26.m3u8"}, {"ad": "34. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/29/15D2D4F8E1A7979F2BFA7CED29A0B466.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "delikanli": {"isim": "Delikanlı", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/delikanli.jpg", "bolumler": [{"ad": "1. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/04/08/84EB3133E9E993ED6B7F8A27ADD8D612.m3u8"}, {"ad": "2. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/04/13/0FB52D4D55D8C0BFE53301F1DF578D0E.m3u8"}, {"ad": "3. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/04/20/9E4B2DB68CABBE52C964A2364DD78085.m3u8"}, {"ad": "4. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/04/27/25EF5C3A78800927C5F6F6199FA0CD51.m3u8"}, {"ad": "5. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/05/05/4AF2E7B1B3F625442CE573870791DAAD.m3u8"}, {"ad": "6. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/05/11/E0E23546F90A2EA634C61558F53D0345.m3u8"}, {"ad": "7. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/05/18/874389FB84A8CD8D5B030452B46CB48C.m3u8"}, {"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}, "deha": {"isim": "Deha", "resim": "https://mo.ciner.com.tr/showtv/iu/1070x600/deha.jpg", "bolumler": [{"ad": "10. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/12/CFBB38A219014CA2AD5B7FD5A0D7B753.m3u8"}, {"ad": "20. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/06/2EEDAA76CF040C7756997F73BF5C51F7.m3u8"}, {"ad": "22. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/03/03/4B7DBDB4AB8518662108B8453DF301E4.m3u8"}, {"ad": "23. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/03/09/6C252CC44F52674E516FB5EA6A2B29F6.m3u8"}, {"ad": "24. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/03/16/80CBB4740214819C7CA8CB4559E6CFAE.m3u8"}, {"ad": "25. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/03/23/7EFCB2AA117024936B4EFAFF6DDAFD77.m3u8"}, {"ad": "26. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/04/13/1998CDAFAA39BA1524D20F26A68CEAEF.m3u8"}, {"ad": "27. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/04/20/B86401F30C8DC514B83637431B49076D.m3u8"}, {"ad": "28. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/04/27/68C2A461EB1F42082BD37127282E4ABC.m3u8"}, {"ad": "29. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/04/7202D22D40D93E33244FE640110435B6.m3u8"}, {"ad": "30. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/11/023DB179222A61437EF06369352BD44C.m3u8"}, {"ad": "31. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2025/05/19/7009EE04BCEA2BC430807357BB360AD5.m3u8"}, {"ad": "145. Bölüm", "link": "https://vmcdn.ciner.com.tr/ht/2026/11/09/BB9B97C7A894D6EF64E8B7C772744547.m3u8"}]}};
+
+        var diziler = {};
 
         document.addEventListener('DOMContentLoaded', function() {
             var container = document.getElementById("diziListesiContainer");
@@ -81,20 +103,21 @@
                 item.className = "filmpanel";
                 item.onclick = function() { showBolumler(key); };
                 
-                // Resim varsa göster, yoksa dizi adının baş harfini göster
-                var imgHtml = dizi.resim 
-                    ? `<img src="${dizi.resim}" onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;\'>${dizi.isim.charAt(0)}</div>';">` 
-                    : `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;">${dizi.isim.charAt(0)}</div>`;
+                // DİKKAT: HTML tarafında dizi adı 'dizi.isim' üzerinden geliyor!
+                var displayName = dizi.isim ? dizi.isim.toUpperCase() : key.replace(/-/g, ' ').toUpperCase();
                 
                 item.innerHTML = `
-                    <div class="filmresim">${imgHtml}</div>
+                    <div class="filmresim"><img src="${dizi.resim}" onerror="this.style.opacity='0';"></div>
                     <div class="filmisimpanel">
-                        <div class="filmisim">${dizi.isim.toUpperCase()}</div>
+                        <div class="filmisim">${displayName}</div>
                     </div>
                 `;
                 container.appendChild(item);
             });
+            checkInitialState();
         });
+
+        let currentScreen = 'anaSayfa';
 
         function showBolumler(diziID) {
             sessionStorage.setItem('currentDiziID', diziID);
@@ -104,55 +127,115 @@
                 diziler[diziID].bolumler.forEach(function(bolum) {
                     var item = document.createElement("div");
                     item.className = "filmpanel";
-                    var imgHtml = diziler[diziID].resim 
-                        ? `<img src="${diziler[diziID].resim}" onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;\'>${diziler[diziID].isim.charAt(0)}</div>';">` 
-                        : `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;">${diziler[diziID].isim.charAt(0)}</div>`;
-
                     item.innerHTML = `
-                        <div class="filmresim">${imgHtml}</div>
+                        <div class="filmresim"><img src="${diziler[diziID].resim}" onerror="this.style.opacity='0';"></div>
                         <div class="filmisimpanel">
                             <div class="filmisim">${bolum.ad}</div>
                         </div>
                     `;
-                    item.onclick = function() { showPlayer(bolum.link); };
+                    item.onclick = function() { showPlayer(bolum.link, diziID); };
                     listContainer.appendChild(item);
                 });
+            } else {
+                listContainer.innerHTML = "<p>Bu dizi için bölüm bulunamadı.</p>";
             }
             document.querySelector("#diziListesiContainer").classList.add("hidden");
             document.getElementById("bolumler").classList.remove("hidden");
+            document.getElementById("geriBtn").style.display = "block";
+            currentScreen = 'bolumler';
+            history.replaceState({ page: 'bolumler', diziID: diziID }, '', '#bolumler-' + diziID);
         }
 
-        function showPlayer(streamUrl) {
+        function showPlayer(streamUrl, diziID) {
             document.getElementById("playerpanel").style.display = "flex";
             document.getElementById("bolumler").classList.add("hidden");
+            currentScreen = 'player';
+            history.pushState({ page: 'player', diziID: diziID, streamUrl: streamUrl }, '', '#player-' + diziID);
+            document.getElementById("main-player").innerHTML = "";
             const fullUrl = BRADMAX_BASE_URL + encodeURIComponent(streamUrl) + BRADMAX_PARAMS;
-            document.getElementById("main-player").innerHTML = `<iframe id="bradmax-iframe" src="${fullUrl}" allowfullscreen></iframe>`;
+            const iframeHtml = `<iframe id="bradmax-iframe" src="${fullUrl}" allowfullscreen tabindex="0" autofocus></iframe>`;
+            document.getElementById("main-player").innerHTML = iframeHtml;
         }
 
         function geriPlayer() {
             document.getElementById("playerpanel").style.display = "none";
             document.getElementById("bolumler").classList.remove("hidden");
             document.getElementById("main-player").innerHTML = "";
+            currentScreen = 'bolumler';
+            var currentDiziID = sessionStorage.getItem('currentDiziID');
+            history.replaceState({ page: 'bolumler', diziID: currentDiziID }, '', '#bolumler-' + currentDiziID);
         }
 
         function geriDon() {
+            sessionStorage.removeItem('currentDiziID');
             document.querySelector("#diziListesiContainer").classList.remove("hidden");
             document.getElementById("bolumler").classList.add("hidden");
+            document.getElementById("geriBtn").style.display = "none";
+            currentScreen = 'anaSayfa';
+            history.replaceState({ page: 'anaSayfa' }, '', '#anaSayfa');
+        }
+
+        window.addEventListener('popstate', function(event) {
+            var currentDiziID = sessionStorage.getItem('currentDiziID');
+            if (event.state && event.state.page === 'player' && event.state.diziID && event.state.streamUrl) {
+                showBolumler(event.state.diziID);
+                showPlayer(event.state.streamUrl, event.state.diziID);
+            } else if (event.state && event.state.page === 'bolumler' && event.state.diziID) {
+                showBolumler(event.state.diziID);
+            } else {
+                sessionStorage.removeItem('currentDiziID');
+                document.querySelector("#diziListesiContainer").classList.remove("hidden");
+                document.getElementById("bolumler").classList.add("hidden");
+                document.getElementById("playerpanel").style.display = "none";
+                document.getElementById("geriBtn").style.display = "none";
+                currentScreen = 'anaSayfa';
+            }
+        });
+
+        function checkInitialState() {
+            var hash = window.location.hash;
+            if (hash.startsWith('#bolumler-')) {
+                var diziID = hash.replace('#bolumler-', '');
+                showBolumler(diziID);
+            } else if (hash.startsWith('#player-')) {
+                var parts = hash.split('-');
+                var diziID = parts[1];
+                var streamUrl = sessionStorage.getItem('lastStreamUrl');
+                if (streamUrl) {
+                    showBolumler(diziID);
+                    setTimeout(() => { showPlayer(streamUrl, diziID); }, 100);
+                }
+            }
         }
 
         function searchSeries() {
-            var term = document.getElementById('seriesSearch').value.toLowerCase();
-            var panels = document.querySelectorAll('#diziListesiContainer .filmpanel');
+            var searchTerm = document.getElementById('seriesSearch').value.toLowerCase();
+            var container = document.getElementById('diziListesiContainer');
+            var panels = container.querySelectorAll('.filmpanel');
+            var found = false;
             panels.forEach(function(panel) {
-                var name = panel.querySelector('.filmisim').textContent.toLowerCase();
-                panel.style.display = name.includes(term) ? 'block' : 'none';
+                var seriesName = panel.querySelector('.filmisim').textContent.toLowerCase();
+                if (seriesName.includes(searchTerm)) { panel.style.display = 'block'; found = true; }
+                else { panel.style.display = 'none'; }
             });
+            if (!found) {
+                var noResults = document.createElement('div');
+                noResults.className = 'hataekran';
+                noResults.innerHTML = '<i class="fas fa-search"></i><div class="hatayazi">Sonuç bulunamadı!</div>';
+                container.appendChild(noResults);
+            }
             return false;
         }
 
         function resetSeriesSearch() {
-            document.querySelectorAll('#diziListesiContainer .filmpanel').forEach(p => p.style.display = 'block');
+            var container = document.getElementById('diziListesiContainer');
+            var panels = container.querySelectorAll('.filmpanel');
+            panels.forEach(function(panel) { panel.style.display = 'block'; });
+            var noResults = container.querySelector('.hataekran');
+            if (noResults) { noResults.remove(); }
         }
+
+        window.addEventListener('load', function() { setTimeout(checkInitialState, 100); });
     </script>
 </body>
 </html>
