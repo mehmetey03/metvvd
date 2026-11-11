@@ -3,13 +3,17 @@ from bs4 import BeautifulSoup
 import json
 import time
 import re
+import os
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 BASE_URL = "https://www.showtv.com.tr"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "X-Requested-With": "XMLHttpRequest",
-    "Accept": "text/html, */*; q=0.01"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 MAX_RETRIES = 5
@@ -47,9 +51,7 @@ def extract_episode_number_only(name):
     return name
 
 def get_image_url(img_tag):
-    """data-src, srcset, src sırasıyla en doğru resim URL'sini al."""
-    if not img_tag:
-        return ""
+    if not img_tag: return ""
     for attr in ["data-src", "srcset", "src"]:
         val = img_tag.get(attr)
         if val and not val.startswith("data:"):
@@ -58,94 +60,77 @@ def get_image_url(img_tag):
             return val.split("?")[0]
     return ""
 
-def parse_series_cards(soup):
-    """Bir BeautifulSoup nesnesindeki tüm dizi kartlarını ayıklar."""
-    results = {}
-    for card in soup.find_all("div", attrs={"data-box": "type1"}):
-        a = card.find("a", href=re.compile(r"^/dizi/tanitim/"))
-        if not a:
-            continue
-        href = a.get("href")
-        if not href:
-            continue
-        title = a.get("title")
-        if not title:
-            img = a.find("img")
-            if img:
-                title = img.get("alt")
-        if not title:
-            title = href.strip("/").split("/")[-2].replace("-", " ").title()
-        poster = get_image_url(card.find("img"))
-        if href not in results:
-            results[href] = {"title": title.strip(), "poster": poster}
-    return results
+def load_all_series_with_selenium():
+    """Selenium ile tüm dizileri 'Daha Fazla Göster' butonuna tıklayarak yükler."""
+    print("Selenium başlatılıyor...")
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-gpu")
 
-def load_all_series():
-    """İlk sayfa + Daha Fazla Göster sayfalarını çekerek TÜM dizileri döndürür."""
+    driver = webdriver.Chrome(options=chrome_options)
     all_series = {}
 
-    print("İlk sayfa taranıyor...")
-    soup = get_soup(f"{BASE_URL}/diziler")
-    if not soup:
-        print("İlk sayfa yüklenemedi!")
-        return all_series
+    try:
+        print(f"Sayfa açılıyor: {BASE_URL}/diziler")
+        driver.get(f"{BASE_URL}/diziler")
+        time.sleep(3)
 
-    first_page = parse_series_cards(soup)
-    all_series.update(first_page)
-    print(f"İlk sayfada {len(first_page)} dizi bulundu.")
+        # "Daha Fazla Göster" butonuna görünmez olana kadar tıkla
+        click_count = 0
+        while True:
+            try:
+                # Buton var mı ve tıklanabilir mi?
+                load_more_btn = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "button[data-load-more]"))
+                )
+                # Buton disabled mı veya gizli mi?
+                if not load_more_btn.is_displayed() or load_more_btn.get_attribute("data-exhausted") == "1":
+                    print("Buton artık görünmüyor veya tükendi. Sayfalama bitti.")
+                    break
+                
+                # Sayfayı butona kaydır ve tıkla
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", load_more_btn)
+                time.sleep(0.5)
+                load_more_btn.click()
+                click_count += 1
+                print(f"  'Daha Fazla Göster' tıklandı ({click_count}). Bekleniyor...")
+                time.sleep(2)  # Yeni içeriğin yüklenmesini bekle
+            except Exception as e:
+                print(f"  Buton bulunamadı veya tıklanamadı: {e}. Sayfalama bitti.")
+                break
 
-    # "Daha Fazla Göster" butonunu bul
-    load_more_btn = soup.find("button", attrs={"data-load-more": True})
-    if not load_more_btn:
-        print("'Daha Fazla Göster' butonu bulunamadı, sadece ilk sayfa alındı.")
-        return all_series
+        print(f"Toplam {click_count} kez 'Daha Fazla Göster' tıklandı.")
 
-    endpoint = load_more_btn.get("data-endpoint", "/diziler/daha-fazla")
-    page = int(load_more_btn.get("data-page", "2"))
-    batch = int(load_more_btn.get("data-batch", "12"))
-    print(f"Sayfalama başlıyor: endpoint={endpoint}, ilk sayfa={page}, batch={batch}")
-
-    while True:
-        ajax_url = f"{BASE_URL}{endpoint}?page={page}"
-        print(f"Sayfa {page} çekiliyor: {ajax_url}")
-
-        ajax_soup = get_soup(ajax_url)
-        if not ajax_soup:
-            print("Sayfa yüklenemedi, döngü bitiyor.")
-            break
-
-        new_cards = parse_series_cards(ajax_soup)
-        if not new_cards:
-            print("Yeni dizi gelmedi, sayfalama tamamlandı.")
-            break
-
-        added = 0
-        for href, info in new_cards.items():
+        # Şimdi tüm sayfa HTML'ini al ve BeautifulSoup ile parse et
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        for card in soup.find_all("div", attrs={"data-box": "type1"}):
+            a = card.find("a", href=re.compile(r"^/dizi/tanitim/"))
+            if not a: continue
+            href = a.get("href")
+            if not href: continue
+            title = a.get("title") or (a.find("img").get("alt") if a.find("img") else href.strip("/").split("/")[-2].replace("-", " ").title())
+            poster = get_image_url(card.find("img"))
             if href not in all_series:
-                all_series[href] = info
-                added += 1
-
-        print(f"Sayfa {page}: {added} yeni dizi eklendi. Toplam: {len(all_series)}")
-
-        if added == 0:
-            print("Yeni dizi eklenmedi, döngü bitiyor.")
-            break
-
-        page += 1
-        time.sleep(0.5)
+                all_series[href] = {"title": title.strip(), "poster": poster}
+        
+        print(f"Toplam {len(all_series)} benzersiz dizi bulundu.")
+    finally:
+        driver.quit()
 
     return all_series
 
 def main():
     print("Diziler ve Bölümler taranıyor...")
 
-    series = load_all_series()
+    # Selenium ile tüm dizileri yükle
+    series = load_all_series_with_selenium()
     if not series:
         print("Hiç dizi bulunamadı!")
         create_html_file({})
         return
-
-    print(f"\nToplam {len(series)} benzersiz dizi bulundu. Bölümler çekiliyor...\n")
 
     diziler_data = {}
 
@@ -156,9 +141,6 @@ def main():
             dizi_id = slugify(dizi_adi)
             poster_url = info["poster"]
 
-            if not dizi_adi or not dizi_id:
-                continue
-
             print(f"--> İşleniyor: {dizi_adi}")
 
             detail_soup = get_soup(dizi_link)
@@ -168,7 +150,6 @@ def main():
 
             raw_links = []
             seen_urls = set()
-
             for opt in detail_soup.find_all("option", attrs={"data-href": True}):
                 rel_link = opt.get("data-href")
                 bolum_adi = opt.text.strip()
@@ -179,13 +160,11 @@ def main():
                         seen_urls.add(full)
 
             print(f"    [i] {len(raw_links)} bölüm linki bulundu.")
-
             final_bolumler = []
 
             for idx, item in enumerate(raw_links, 1):
                 video_soup = get_soup(item["page_url"])
-                if not video_soup:
-                    continue
+                if not video_soup: continue
 
                 page_title = video_soup.title.string if video_soup.title else item["ad"]
                 clean_name = page_title.replace("İzle", "").replace("Show TV", "").strip()
@@ -215,37 +194,31 @@ def main():
                                 "episode_num": extract_episode_number(display_name)
                             })
                             print(f"      [✓] {episode_only} [{format_type}]")
-                        else:
-                            print(f"      [✗] Video kaynağı bulunamadı.")
                     except Exception as e:
                         print(f"      [!] JSON hatası: {e}")
 
                 time.sleep(0.1)
 
             if final_bolumler:
-                final_bolumler.sort(key=lambda x: x["episode_num"])
+                final_bolumler.sort(key=lambda x: x['episode_num'])
                 cleaned = [{"ad": x["ad"], "link": x["link"]} for x in final_bolumler]
                 diziler_data[dizi_id] = {
                     "isim": dizi_adi,
                     "resim": poster_url,
                     "bolumler": cleaned
                 }
-                print(f"    [✓] {len(cleaned)} bölüm eklendi.\n")
+                print(f"    [✓] {len(cleaned)} bölüm eklendi.")
             else:
-                print(f"    [✗] Bölüm bulunamadı.\n")
+                print(f"    [✗] Bölüm bulunamadı.")
 
         except Exception as e:
-            print(f"[HATA] {dizi_adi}: {e}\n")
+            print(f"[HATA] {dizi_adi}: {e}")
 
-    print("\n" + "=" * 50)
-    print(f"Toplam {len(diziler_data)} dizi başarıyla işlendi!")
-    print("=" * 50)
-
+    print(f"\nToplam {len(diziler_data)} dizi işlendi.")
     create_html_file(diziler_data)
 
 def create_html_file(data):
     json_str = json.dumps(data, ensure_ascii=False)
-
     html_template = '''<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -358,7 +331,6 @@ def create_html_file(data):
                 `;
                 container.appendChild(item);
             });
-            checkInitialState();
         });
 
         function showBolumler(diziID) {
@@ -379,8 +351,6 @@ def create_html_file(data):
                     item.onclick = function() { showPlayer(bolum.link); };
                     listContainer.appendChild(item);
                 });
-            } else {
-                listContainer.innerHTML = "<p>Bu dizi için bölüm bulunamadı.</p>";
             }
             document.querySelector("#diziListesiContainer").classList.add("hidden");
             document.getElementById("bolumler").classList.remove("hidden");
@@ -402,7 +372,6 @@ def create_html_file(data):
         }
 
         function geriDon() {
-            sessionStorage.removeItem('currentDiziID');
             document.querySelector("#diziListesiContainer").classList.remove("hidden");
             document.getElementById("bolumler").classList.add("hidden");
             document.getElementById("geriBtn").style.display = "none";
@@ -421,8 +390,6 @@ def create_html_file(data):
         function resetSeriesSearch() {
             document.querySelectorAll('#diziListesiContainer .filmpanel').forEach(p => p.style.display = 'block');
         }
-
-        function checkInitialState() {}
     </script>
 </body>
 </html>'''
