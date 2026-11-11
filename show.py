@@ -7,30 +7,35 @@ import re
 BASE_URL = "https://www.showtv.com.tr"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
 MAX_RETRIES = 5
 RETRY_DELAY = 2
 
 
-def get_soup(url, retry_count=0):
+def get_soup(url, retry_count=0, is_json=False):
+    """URL'den BeautifulSoup veya JSON döndürür. Timeout hatalarında yeniden dener."""
     try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
+        response = requests.get(url, headers=HEADERS, timeout=20)
         response.raise_for_status()
+        if is_json:
+            return response.json()
         return BeautifulSoup(response.content, "html.parser")
     except requests.exceptions.Timeout:
         if retry_count < MAX_RETRIES:
             print(f"      ⚠ Timeout hatası! Yeniden deneniyor... ({retry_count + 1}/{MAX_RETRIES})")
             time.sleep(RETRY_DELAY)
-            return get_soup(url, retry_count + 1)
+            return get_soup(url, retry_count + 1, is_json)
         print(f"      ✗ Maksimum deneme sayısına ulaşıldı. URL atlanıyor: {url}")
         return None
     except Exception as e:
         if retry_count < MAX_RETRIES:
             print(f"      ⚠ Hata: {e}. Yeniden deneniyor... ({retry_count + 1}/{MAX_RETRIES})")
             time.sleep(RETRY_DELAY)
-            return get_soup(url, retry_count + 1)
+            return get_soup(url, retry_count + 1, is_json)
         print(f"      ✗ Maksimum deneme sayısına ulaşıldı. Hata: {e}")
         return None
 
@@ -64,45 +69,45 @@ def extract_episode_number_only(name):
 
 
 def get_image_url(img_tag):
-    """src, data-src, srcset sırasıyla dener."""
+    """Resim URL'sini en güvenilir yerden bulur."""
     if not img_tag:
         return ""
-    for attr in ("src", "data-src"):
-        val = img_tag.get(attr)
-        if val and not val.startswith("data:") and "placeholder" not in val:
-            return val.split("?")[0]
+    
+    # 1. src
+    src = img_tag.get("src")
+    if src and not src.startswith("data:") and "placeholder" not in src and "resimyok" not in src.lower():
+        return src.split("?")[0]
+
+    # 2. data-src
+    data_src = img_tag.get("data-src")
+    if data_src and not data_src.startswith("data:"):
+        return data_src.split("?")[0]
+
+    # 3. srcset (ilk URL'yi al)
     srcset = img_tag.get("srcset")
     if srcset:
-        first = srcset.split(",")[0].strip().split(" ")[0]
-        if first and not first.startswith("data:"):
-            return first.split("?")[0]
+        first_url = srcset.split(",")[0].strip().split(" ")[0]
+        if first_url and not first_url.startswith("data:"):
+            return first_url.split("?")[0]
+
     return ""
 
 
 def find_series_cards(soup):
-    """
-    /diziler sayfasındaki dizi kartlarını bulur.
-    Yapı: <div data-box="type1"> içinde figure > a[href^='/dizi/tanitim/']
-    """
     results = {}
     for card in soup.select("div[data-box='type1']"):
         a = card.select_one("a[href^='/dizi/tanitim/']")
-        if not a:
-            continue
+        if not a: continue
         href = a.get("href")
-        if not href:
-            continue
+        if not href: continue
 
-        # Dizi adını birkaç yerden dene
         title = a.get("title")
         if not title:
             span = card.select_one("figcaption span")
-            if span:
-                title = span.get_text(strip=True)
+            if span: title = span.get_text(strip=True)
         if not title:
             img = a.find("img")
-            if img:
-                title = img.get("alt")
+            if img: title = img.get("alt")
         if not title:
             title = href.strip("/").split("/")[-2].replace("-", " ").title()
 
@@ -114,20 +119,64 @@ def find_series_cards(soup):
     return results
 
 
+def load_all_series():
+    """Tüm dizi listesini (ilk sayfa + AJAX) yükler."""
+    print("Dizi listesi yükleniyor...")
+    soup = get_soup(f"{BASE_URL}/diziler")
+    if not soup: return {}
+
+    all_series = find_series_cards(soup)
+    print(f"İlk sayfadan {len(all_series)} dizi alındı.")
+    
+    # Daha fazla göster butonunu bul (sayfa numarası)
+    load_more_btn = soup.find("button", attrs={"data-load-more": True})
+    if not load_more_btn:
+        print("Sayfalama butonu bulunamadı, sadece ilk sayfa alındı.")
+        return all_series
+        
+    endpoint = load_more_btn.get("data-endpoint", "/diziler/daha-fazla")
+    page = int(load_more_btn.get("data-page", "2"))
+    batch = int(load_more_btn.get("data-batch", "12"))
+    
+    print(f"Sayfalama başlıyor: {endpoint}, sayfa boyutu: {batch}")
+    
+    while True:
+        ajax_url = f"{BASE_URL}{endpoint}?page={page}"
+        # Gerekirse JSON isteği ile çek, genelde HTML döner
+        ajax_soup = get_soup(ajax_url)
+        if not ajax_soup:
+            break
+            
+        new_series = find_series_cards(ajax_soup)
+        if not new_series:
+            print("Yeni dizi bulunamadı. Sayfalama bitti.")
+            break
+            
+        added = 0
+        for href, info in new_series.items():
+            if href not in all_series:
+                all_series[href] = info
+                added += 1
+                
+        print(f"Sayfa {page} işlendi. {added} yeni dizi eklendi. Toplam: {len(all_series)}")
+        
+        if added == 0:
+            print("Yeni dizi gelmediği için döngü kırıldı.")
+            break
+            
+        page += 1
+        time.sleep(0.5) # Sunucuya nazik davran
+    
+    return all_series
+
+
 def main():
     print("Diziler ve Bölümler taranıyor... (MP4 & M3U8 + Otomatik Yeniden Deneme)")
 
-    soup = get_soup(f"{BASE_URL}/diziler")
-    if not soup:
-        print("Dizi listesi sayfası yüklenemedi!")
-        create_html_file({})
-        return
-
-    series = find_series_cards(soup)
-    print(f"Toplam {len(series)} dizi bulundu.\n")
-
+    series = load_all_series()
+    
     if not series:
-        print("Hiç dizi bulunamadı! Seçici değişmiş olabilir.")
+        print("Hiç dizi bulunamadı!")
         create_html_file({})
         return
 
@@ -150,7 +199,7 @@ def main():
                 print(f"    [✗] Detay sayfası yüklenemedi, atlanıyor.")
                 continue
 
-            # Detay sayfasından daha iyi poster çıkmaya çalış
+            # Detay sayfasından daha iyi bir poster varsa onu kullan
             og = detail_soup.find("meta", property="og:image")
             if og and og.get("content") and "showtv_social_media" not in og["content"]:
                 poster_url = og["content"].split("?")[0]
@@ -171,11 +220,9 @@ def main():
             # 2) Detay sayfasındaki doğrudan bölüm linkleri
             for a in detail_soup.select("a[href*='/tum_bolumler/']"):
                 href = a.get("href")
-                if not href:
-                    continue
+                if not href: continue
                 full = BASE_URL + href if href.startswith("/") else href
-                if full in seen_urls:
-                    continue
+                if full in seen_urls: continue
                 name = a.get("title") or a.get_text(strip=True) or "Bölüm"
                 raw_links.append({"ad": name, "page_url": full})
                 seen_urls.add(full)
@@ -275,18 +322,6 @@ def create_html_file(data):
             font-size: 15px; -webkit-tap-highlight-color: transparent; font-style: italic;
             line-height: 20px; -webkit-text-size-adjust: 100%; overflow-x: hidden;
         }
-        .slider-slide { background: #15161a; box-sizing: border-box; }
-        .slider { position: relative; padding-bottom: 0px; width: 100%; overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
-        .slider-container { display: flex; width: 100%; align-items: center;
-            overflow: auto; scroll-behavior: smooth; }
-        .slider-container .slider-slide { aspect-ratio: 9/13.5; display: flex; flex-shrink: 0;
-            flex-basis: 14.14%; scroll-snap-align: start; align-items: center; justify-content: center; }
-        .slider-container::-webkit-scrollbar { width: 0px; }
-        .hataekran i { color: #572aa7; font-size: 80px; text-align: center; width: 100%; }
-        .hataekran { width: 80%; margin: 20px auto; color: #fff; background: #15161a;
-            border: 1px solid #323442; padding: 10px; box-sizing: border-box; border-radius: 10px; }
-        .hatayazi { color: #fff; font-size: 15px; text-align: center; width: 100%; margin: 20px 0px; }
         .filmpaneldis { background: #15161a; width: 100%; margin: 20px auto; overflow: hidden; padding: 10px 5px; box-sizing: border-box; }
         .baslik { width: 96%; color: #fff; padding: 15px 10px; box-sizing: border-box; }
         .filmpanel { width: 12%; height: 200px; background: #15161a; float: left; margin: 1.14%;
@@ -327,6 +362,10 @@ def create_html_file(data):
         .player-geri-btn { background: #572aa7; color: white; padding: 10px; text-align: center;
             border-radius: 5px; cursor: pointer; margin: 10px; width: 100px; position: absolute;
             top: 10px; left: 10px; z-index: 10000; }
+        .hataekran i { color: #572aa7; font-size: 80px; text-align: center; width: 100%; }
+        .hataekran { width: 80%; margin: 20px auto; color: #fff; background: #15161a;
+            border: 1px solid #323442; padding: 10px; box-sizing: border-box; border-radius: 10px; }
+        .hatayazi { color: #fff; font-size: 15px; text-align: center; width: 100%; margin: 20px 0px; }
         @media(max-width:550px) {
             .filmpanel { width: 31.33%; height: 190px; margin: 1%; }
             #main-player { height: 100%; }
@@ -375,9 +414,13 @@ def create_html_file(data):
                 item.className = "filmpanel";
                 item.onclick = function() { showBolumler(key); };
                 var displayName = (dizi.isim || key).toUpperCase();
+                
+                // Resim yoksa placeholder
                 var imgUrl = dizi.resim || "";
+                var imgTag = imgUrl ? `<img src="${imgUrl}" onerror="this.onerror=null;this.src='https://via.placeholder.com/300x450?text=Resim+Yok';">` : `<div style="display:flex; align-items:center; justify-content:center; height:100%; background:#2a2a2a; color:#888;">Resim Yok</div>`;
+                
                 item.innerHTML = `
-                    <div class="filmresim"><img src="${imgUrl}" alt="${displayName}" onerror="this.onerror=null;this.src='https://via.placeholder.com/300x450?text=Resim+Yok';"></div>
+                    <div class="filmresim">${imgTag}</div>
                     <div class="filmisimpanel">
                         <div class="filmisim">${displayName}</div>
                     </div>
@@ -395,8 +438,10 @@ def create_html_file(data):
                     var item = document.createElement("div");
                     item.className = "filmpanel";
                     var imgUrl = diziler[diziID].resim || "";
+                    var imgTag = imgUrl ? `<img src="${imgUrl}" onerror="this.onerror=null;this.src='https://via.placeholder.com/300x450?text=Resim+Yok';">` : `<div style="display:flex; align-items:center; justify-content:center; height:100%; background:#2a2a2a; color:#888;">Resim Yok</div>`;
+                    
                     item.innerHTML = `
-                        <div class="filmresim"><img src="${imgUrl}" onerror="this.onerror=null;this.src='https://via.placeholder.com/300x450?text=Resim+Yok';"></div>
+                        <div class="filmresim">${imgTag}</div>
                         <div class="filmisimpanel">
                             <div class="filmisim">${bolum.ad}</div>
                         </div>
