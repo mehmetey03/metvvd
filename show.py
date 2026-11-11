@@ -7,169 +7,139 @@ import re
 BASE_URL = "https://www.showtv.com.tr"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
-    "X-Requested-With": "XMLHttpRequest" # AJAX istekleri için önemli
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 MAX_RETRIES = 5
 RETRY_DELAY = 2
 
-
 def get_soup(url, retry_count=0):
     try:
-        response = requests.get(url, headers=HEADERS, timeout=20)
+        response = requests.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
         return BeautifulSoup(response.content, "html.parser")
     except requests.exceptions.Timeout:
         if retry_count < MAX_RETRIES:
-            print(f"      ⚠ Timeout hatası! Yeniden deneniyor... ({retry_count + 1}/{MAX_RETRIES})")
+            print(f"      ⚠ Timeout! Tekrar deneniyor ({retry_count + 1}/{MAX_RETRIES})")
             time.sleep(RETRY_DELAY)
             return get_soup(url, retry_count + 1)
-        print(f"      ✗ Maksimum deneme sayısına ulaşıldı. URL atlanıyor: {url}")
         return None
     except Exception as e:
         if retry_count < MAX_RETRIES:
-            print(f"      ⚠ Hata: {e}. Yeniden deneniyor... ({retry_count + 1}/{MAX_RETRIES})")
+            print(f"      ⚠ Hata: {e}. Tekrar deneniyor ({retry_count + 1}/{MAX_RETRIES})")
             time.sleep(RETRY_DELAY)
             return get_soup(url, retry_count + 1)
-        print(f"      ✗ Maksimum deneme sayısına ulaşıldı. Hata: {e}")
         return None
-
 
 def slugify(text):
     text = text.lower()
-    text = (text.replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u')
-                .replace('ş', 's').replace('ö', 'o').replace('ç', 'c'))
-    text = re.sub(r'[^a-z0-9]', '', text)
-    return text
-
+    text = text.replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+    return re.sub(r'[^a-z0-9]', '', text)
 
 def extract_episode_number(name):
     match = re.search(r'(\d+)\.\s*Bölüm', name)
-    if match:
-        return int(match.group(1))
-    return 9999
-
+    return int(match.group(1)) if match else 9999
 
 def extract_episode_number_only(name):
     match = re.search(r'(\d+)\.\s*Bölüm', name)
-    if match:
-        return f"{match.group(1)}. Bölüm"
+    if match: return f"{match.group(1)}. Bölüm"
     match = re.search(r'Bölüm\s*(\d+)', name, re.IGNORECASE)
-    if match:
-        return f"{match.group(1)}. Bölüm"
+    if match: return f"{match.group(1)}. Bölüm"
     match = re.search(r'(\d+)\s*Bölüm', name, re.IGNORECASE)
-    if match:
-        return f"{match.group(1)}. Bölüm"
+    if match: return f"{match.group(1)}. Bölüm"
     return name
 
+# ================== YENİ: Dizi listesini ve resimleri çeken kısım ==================
 
-def get_image_url(img_tag):
-    """Lazy-load yapısına uygun resim çekici."""
-    if not img_tag:
+def get_poster_url(card):
+    """Karttaki resim etiketinden en doğru resim linkini al."""
+    img = card.find("img")
+    if not img:
         return ""
     
-    # 1. data-src (Lazy load için en garantili)
-    data_src = img_tag.get("data-src")
-    if data_src and not data_src.startswith("data:"):
-        return data_src.split("?")[0]
-        
-    # 2. srcset (Genelde yüksek çözünürlük burada olur)
-    srcset = img_tag.get("srcset")
-    if srcset:
-        first_url = srcset.split(",")[0].strip().split(" ")[0]
-        if first_url and not first_url.startswith("data:"):
-            return first_url.split("?")[0]
-
-    # 3. src
-    src = img_tag.get("src")
-    if src and not src.startswith("data:") and "placeholder" not in src.lower():
-        return src.split("?")[0]
-
+    # Resim linkleri genelde src veya data-src içinde
+    for attr in ["src", "data-src", "srcset"]:
+        val = img.get(attr)
+        if val and not val.startswith("data:"):
+            # srcset ise ilk url'yi al
+            if attr == "srcset":
+                val = val.split(",")[0].strip().split(" ")[0]
+            # Başındaki ?parametreyi temizle
+            return val.split("?")[0]
     return ""
 
-
-def find_series_cards(soup):
-    """Sayfadaki veya AJAX'tan gelen dizi kartlarını ayıklar."""
-    results = {}
-    for card in soup.select("div[data-box='type1']"):
-        a = card.select_one("a[href^='/dizi/tanitim/']")
-        if not a: continue
-        href = a.get("href")
-        if not href: continue
-
-        title = a.get("title")
-        if not title:
-            span = card.select_one("figcaption span")
-            if span: title = span.get_text(strip=True)
-        if not title:
-            title = href.strip("/").split("/")[-2].replace("-", " ").title()
-
-        img_tag = a.find("img")
-        poster = get_image_url(img_tag)
-
-        if href not in results:
-            results[href] = {"title": title.strip(), "poster": poster}
-    return results
-
-
 def load_all_series():
-    """Sayfa 1'den başlayıp AJAX ile tüm dizileri çeker."""
-    print("Dizi listesi yükleniyor (İlk Sayfa)...")
-    soup = get_soup(f"{BASE_URL}/diziler")
-    if not soup: return {}
-
-    all_series = find_series_cards(soup)
-    print(f"İlk sayfadan {len(all_series)} dizi alındı.")
+    """İlk sayfa + Daha Fazla Göster sayfalarını çekerek tüm dizileri döndürür."""
+    all_series = {}
     
-    # Sayfalama parametrelerini oku
-    load_more_btn = soup.find("button", attrs={"data-load-more": True})
-    if not load_more_btn:
-        print("Sayfalama butonu bulunamadı.")
+    # 1. ADIM: İlk sayfayı çek
+    print("İlk sayfa taranıyor...")
+    soup = get_soup(f"{BASE_URL}/diziler")
+    if not soup:
         return all_series
+
+    # Kartları bul
+    for card in soup.find_all("div", attrs={"data-box": "type1"}):
+        a = card.find("a", href=re.compile(r"^/dizi/tanitim/"))
+        if not a: continue
         
-    endpoint = load_more_btn.get("data-endpoint", "/diziler/daha-fazla")
-    page = int(load_more_btn.get("data-page", "2"))
+        href = a.get("href")
+        title = a.get("title") or a.find("img").get("alt") if a.find("img") else href.split("/")[-2].replace("-", " ").title()
+        poster = get_poster_url(card)
+        
+        if href not in all_series:
+            all_series[href] = {"title": title.strip(), "poster": poster}
+
+    print(f"İlk sayfada {len(all_series)} dizi bulundu.")
+
+    # 2. ADIM: Daha fazla göster (AJAX) sayfalarını çek
+    load_more = soup.find("button", attrs={"data-load-more": True})
+    if not load_more:
+        print("'Daha Fazla Göster' butonu bulunamadı.")
+        return all_series
+
+    endpoint = load_more.get("data-endpoint", "/diziler/daha-fazla")
+    page = int(load_more.get("data-page", "2"))
     
     while True:
         ajax_url = f"{BASE_URL}{endpoint}?page={page}"
-        print(f"AJAX İsteği: {ajax_url}")
+        print(f"Sayfa {page} çekiliyor: {ajax_url}")
         
-        # Sayfa bittiğinde 404 dönebilir, hata yönetimiyle yakalıyoruz
         ajax_soup = get_soup(ajax_url)
-        if not ajax_soup:
-            print("Yeni sayfa yüklenemedi, sayfalama bitti.")
+        if not ajax_soup: break
+
+        # Yeni sayfadaki kartları ayıkla
+        new_cards = ajax_soup.find_all("div", attrs={"data-box": "type1"})
+        if not new_cards:
+            print("Yeni dizi gelmedi, döngü bitiyor.")
             break
-            
-        new_series = find_series_cards(ajax_soup)
-        if not new_series:
-            print("Bu sayfada dizi bulunamadı, sayfalama bitti.")
-            break
-            
+
         added = 0
-        for href, info in new_series.items():
-            if href not in all_series:
-                all_series[href] = info
-                added += 1
-                
-        print(f"Sayfa {page}: {added} yeni dizi eklendi. (Toplam: {len(all_series)})")
-        
-        if added == 0:
-            break
+        for card in new_cards:
+            a = card.find("a", href=re.compile(r"^/dizi/tanitim/"))
+            if not a: continue
+            href = a.get("href")
+            if href in all_series: continue
+            title = a.get("title") or a.find("img").get("alt") if a.find("img") else href.split("/")[-2].replace("-", " ").title()
+            poster = get_poster_url(card)
+            all_series[href] = {"title": title.strip(), "poster": poster}
+            added += 1
             
+        print(f"Sayfa {page}: {added} yeni dizi eklendi. Toplam: {len(all_series)}")
+        
+        if added == 0: break
         page += 1
-        time.sleep(0.5)
-    
+        time.sleep(0.5) # Sunucuya nazik davran
+
     return all_series
 
+# ====================================================================================
 
 def main():
-    print("Show TV VOD Scraper Başlıyor...")
+    print("Diziler ve Bölümler taranıyor...")
 
+    # Tüm dizileri çek
     series = load_all_series()
-    
     if not series:
         print("Hiç dizi bulunamadı!")
         create_html_file({})
@@ -179,55 +149,47 @@ def main():
 
     for dizi_href, info in series.items():
         try:
-            dizi_link = BASE_URL + dizi_href if dizi_href.startswith("/") else dizi_href
+            dizi_link = BASE_URL + dizi_href
             dizi_adi = info["title"]
             dizi_id = slugify(dizi_adi)
             poster_url = info["poster"]
-
-            if not dizi_adi or not dizi_id:
-                continue
+            
+            if not dizi_adi or not dizi_id: continue
 
             print(f"\n--> İşleniyor: {dizi_adi}")
 
             detail_soup = get_soup(dizi_link)
-            if not detail_soup:
+            if not detail_soup: 
+                print(f"    [✗] Detay sayfası yüklenemedi.")
                 continue
 
-            # Detay sayfasında daha iyi bir afiş varsa onu kullan
-            og = detail_soup.find("meta", property="og:image")
-            if og and og.get("content") and "showtv_social_media" not in og["content"]:
-                poster_url = og["content"].split("?")[0]
+            # Eğer afiş hiç alınamadıysa detay sayfasından bir kez daha dene
+            if not poster_url:
+                og = detail_soup.find("meta", property="og:image")
+                if og and og.get("content"): poster_url = og["content"].split("?")[0]
 
             raw_links = []
             seen_urls = set()
 
+            # Bölümleri topla
             for opt in detail_soup.find_all("option", attrs={"data-href": True}):
                 rel_link = opt.get("data-href")
                 if rel_link and "/tum_bolumler/" in rel_link:
-                    full = BASE_URL + rel_link if rel_link.startswith("/") else rel_link
+                    full = BASE_URL + rel_link
                     if full not in seen_urls:
                         raw_links.append({"ad": opt.text.strip(), "page_url": full})
                         seen_urls.add(full)
 
-            for a in detail_soup.select("a[href*='/tum_bolumler/']"):
-                href = a.get("href")
-                if not href: continue
-                full = BASE_URL + href if href.startswith("/") else href
-                if full not in seen_urls: 
-                    name = a.get("title") or a.get_text(strip=True) or "Bölüm"
-                    raw_links.append({"ad": name, "page_url": full})
-                    seen_urls.add(full)
+            print(f"    [i] {len(raw_links)} bölüm linki bulundu.")
 
-            print(f"    [i] {len(raw_links)} bölüm bulundu.")
             final_bolumler = []
 
             for idx, item in enumerate(raw_links, 1):
                 video_soup = get_soup(item["page_url"])
-                if not video_soup:
-                    continue
+                if not video_soup: continue
 
                 page_title = video_soup.title.string if video_soup.title else item["ad"]
-                clean_name = (page_title or "").replace("İzle", "").replace("Show TV", "").strip()
+                clean_name = page_title.replace("İzle", "").replace("Show TV", "").strip()
                 display_name = clean_name if "Bölüm" in clean_name else item["ad"]
                 episode_only = extract_episode_number_only(display_name)
 
@@ -242,7 +204,7 @@ def main():
                                 video_url = media["m3u8"][0]["src"]
                             elif "mp4" in media and len(media["mp4"]) > 0:
                                 video_url = media["mp4"][0]["src"]
-                                
+
                         if video_url:
                             video_url = video_url.replace("//ht/", "/ht/").replace("com//", "com/")
                             final_bolumler.append({
@@ -255,33 +217,37 @@ def main():
                 time.sleep(0.1)
 
             if final_bolumler:
-                final_bolumler.sort(key=lambda x: x["episode_num"])
+                final_bolumler.sort(key=lambda x: x['episode_num'])
                 cleaned = [{"ad": x["ad"], "link": x["link"]} for x in final_bolumler]
                 diziler_data[dizi_id] = {
                     "isim": dizi_adi,
                     "resim": poster_url,
-                    "bolumler": cleaned,
+                    "bolumler": cleaned
                 }
                 print(f"    [✓] {len(cleaned)} bölüm eklendi.")
+            else:
+                print(f"    [✗] Bölüm bulunamadı.")
 
         except Exception as e:
             print(f"[HATA] {dizi_adi}: {e}")
 
-    print(f"\nİşlem tamam! Toplam {len(diziler_data)} dizi.")
+    print(f"\nToplam {len(diziler_data)} dizi işlendi.")
     create_html_file(diziler_data)
 
-
+# HTML dosyasını oluşturan kısım (Orijinal kodunuzdaki HTML yapısı aynen korundu, 
+# sadece dizi adının düzgün görünmesi için ufak bir düzeltme yapıldı.)
 def create_html_file(data):
     json_str = json.dumps(data, ensure_ascii=False)
-
     html_template = '''<!DOCTYPE html>
 <html lang="tr">
 <head>
     <title>ME TV YERLİ VOD</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css?family=PT+Sans:700i" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://kit.fontawesome.com/bbe955c5ed.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js"></script>
     <style>
         *:not(input):not(textarea) { user-select: none }
         body { margin: 0; padding: 0; background: #00040d; font-family: sans-serif; font-size: 15px; overflow-x: hidden; }
@@ -289,49 +255,68 @@ def create_html_file(data):
         .baslik { width: 96%; color: #fff; padding: 15px 10px; box-sizing: border-box; }
         .filmpanel { width: 12%; height: 200px; background: #15161a; float: left; margin: 1.14%;
             color: #fff; border-radius: 15px; box-sizing: border-box;
-            border: 1px solid #323442; overflow: hidden; transition: 0.3s; cursor: pointer; position: relative; }
-        .filmisimpanel { width: 100%; height: 200px; position: absolute; bottom: 0; left: 0;
+            box-shadow: 1px 5px 10px rgba(0,0,0,0.1); border: 1px solid #323442; padding: 0px;
+            overflow: hidden; transition: 0.3s; cursor: pointer; }
+        .filmisimpanel { width: 100%; height: 200px; position: relative; margin-top: -200px;
             background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 100%); }
-        .filmpanel:hover { border: 3px solid #572aa7; box-shadow: 0 0 10px rgba(87,42,167,0.5); }
-        .filmresim { width: 100%; height: 100%; overflow: hidden; }
-        .filmresim img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+        .filmpanel:hover { color: #fff; border: 3px solid #572aa7; box-shadow: 0 0 10px rgba(87,42,167,0.5); }
+        .filmresim { width: 100%; height: 100%; margin-bottom: 0px; overflow: hidden; position: relative; }
+        .filmresim img { width: 100%; height: 100%; transition: transform 0.4s ease; object-fit: cover; }
         .filmpanel:hover .filmresim img { transform: scale(1.1); }
-        .filmisim { width: 100%; font-size: 14px; white-space: nowrap; overflow: hidden;
-            text-overflow: ellipsis; padding: 0 5px; box-sizing: border-box;
-            position: absolute; bottom: 5px; }
+        .filmisim { width: 100%; font-size: 14px; text-decoration: none; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; padding: 0px 5px; box-sizing: border-box;
+            color: #fff; position: absolute; bottom: 5px; }
         .aramapanel { width: 100%; height: 60px; background: #15161a; border-bottom: 1px solid #323442;
-            padding: 10px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center;}
-        .logoisim { font-size: 20px; font-weight: bold; color: #fff; margin-left: 10px; }
-        .aramapanelyazi { height: 40px; width: 200px; padding: 0 10px; border: 1px solid #ccc; }
-        .aramapanelbuton { height: 40px; width: 60px; background: #572aa7; color: #fff; border: none; cursor: pointer; }
+            margin: 0px auto; padding: 10px; box-sizing: border-box; overflow: hidden; z-index: 11111; }
+        .aramapanelsag { width: auto; height: 40px; box-sizing: border-box; overflow: hidden; float: right; }
+        .aramapanelsol { width: 50%; height: 40px; box-sizing: border-box; overflow: hidden; float: left; }
+        .aramapanelyazi { height: 40px; width: 120px; border: 1px solid #ccc; box-sizing: border-box;
+            padding: 0px 10px; color: #000; margin: 0px 5px; }
+        .aramapanelbuton { height: 40px; width: 40px; text-align: center; background-color: #572aa7;
+            border: none; color: #fff; box-sizing: border-box; overflow: hidden; float: right; transition: .35s; }
+        .aramapanelbuton:hover { background-color: #fff; color: #000; }
+        .logo { width: 40px; height: 40px; float: left; }
+        .logo img { width: 100%; }
+        .logoisim { font-size: 15px; width: 70%; height: 40px; line-height: 40px; font-weight: 500; color: #fff; }
         .hidden { display: none; }
-        .bolum-container { background: #15161a; padding: 10px; margin-top: 10px; }
-        .geri-btn { background: #572aa7; color: white; padding: 10px; width: 100px; text-align: center;
-            cursor: pointer; margin-bottom: 10px; border-radius: 5px; }
+        .bolum-container { background: #15161a; padding: 10px; margin-top: 10px; border-radius: 5px; }
+        .geri-btn { background: #572aa7; color: white; padding: 10px; text-align: center;
+            border-radius: 5px; cursor: pointer; margin-top: 10px; margin-bottom: 10px;
+            display: none; width: 100px; }
+        .geri-btn:hover { background: #6b3ec7; transition: background 0.3s; }
         .playerpanel { width: 100%; height: 100vh; position: fixed; top: 0; left: 0;
-            background: #0a0e17; z-index: 9999; display: none; flex-direction: column; }
-        #main-player { width: 100%; height: 100%; }
+            background: #0a0e17; z-index: 9999; display: none; flex-direction: column; overflow: hidden; }
+        #main-player { width: 100%; height: 100%; background: #000; }
         #bradmax-iframe { width: 100%; height: 100%; border: none; }
-        .player-geri-btn { background: #572aa7; color: white; padding: 10px; width: 100px; position: absolute; top: 10px; left: 10px; z-index: 10000; cursor: pointer;}
-        @media(max-width:550px) { .filmpanel { width: 31.33%; height: 180px; margin: 1%; } }
+        .player-geri-btn { background: #572aa7; color: white; padding: 10px; text-align: center;
+            border-radius: 5px; cursor: pointer; margin: 10px; width: 100px; position: absolute;
+            top: 10px; left: 10px; z-index: 10000; }
+        .hataekran i { color: #572aa7; font-size: 80px; text-align: center; width: 100%; }
+        .hataekran { width: 80%; margin: 20px auto; color: #fff; background: #15161a;
+            border: 1px solid #323442; padding: 10px; box-sizing: border-box; border-radius: 10px; }
+        .hatayazi { color: #fff; font-size: 15px; text-align: center; width: 100%; margin: 20px 0px; }
+        @media(max-width:550px) {
+            .filmpanel { width: 31.33%; height: 190px; margin: 1%; }
+            #main-player { height: 100%; }
+        }
     </style>
 </head>
 <body>
     <div class="aramapanel">
-        <div style="display:flex; align-items:center;">
-            <img src="https://i.hizliresim.com/t6e66bt.png" style="width: 40px;">
+        <div class="aramapanelsol">
+            <div class="logo"><img src="https://i.hizliresim.com/t6e66bt.png"></div>
             <div class="logoisim">ME TV</div>
         </div>
-        <div>
-            <form onsubmit="return searchSeries()">
-                <input type="text" id="seriesSearch" placeholder="Dizi Ara..." class="aramapanelyazi" oninput="resetSeriesSearch()">
+        <div class="aramapanelsag">
+            <form action="" name="ara" method="GET" onsubmit="return searchSeries()">
+                <input type="text" id="seriesSearch" placeholder="Dizi Adını Giriniz..!" class="aramapanelyazi" oninput="resetSeriesSearch()">
                 <input type="submit" value="ARA" class="aramapanelbuton">
             </form>
         </div>
     </div>
 
     <div class="filmpaneldis" id="diziListesiContainer">
-        <div class="baslik">TÜM DİZİLER</div>
+        <div class="baslik">SHOWTV DİZİLERİ</div>
     </div>
 
     <div id="bolumler" class="bolum-container hidden">
@@ -347,6 +332,7 @@ def create_html_file(data):
     <script>
         const BRADMAX_BASE_URL = "https://bradmax.com/client/embed-player/d9decbf0d308f4bb91825c3f3a2beb7b0aaee2f6_8493?mediaUrl=";
         const BRADMAX_PARAMS = "&autoplay=true&fs=true";
+
         var diziler = ''' + json_str + ''';
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -357,20 +343,21 @@ def create_html_file(data):
                 item.className = "filmpanel";
                 item.onclick = function() { showBolumler(key); };
                 
-                // Resim varsa göster, yoksa dizi adının baş harfini göster
-                var imgHtml = dizi.resim 
-                    ? `<img src="${dizi.resim}" onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;\\'>${dizi.isim.charAt(0)}</div>';">` 
-                    : `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;">${dizi.isim.charAt(0)}</div>`;
+                // DİKKAT: HTML tarafında dizi adı 'dizi.isim' üzerinden geliyor!
+                var displayName = dizi.isim ? dizi.isim.toUpperCase() : key.replace(/-/g, ' ').toUpperCase();
                 
                 item.innerHTML = `
-                    <div class="filmresim">${imgHtml}</div>
+                    <div class="filmresim"><img src="${dizi.resim}" onerror="this.style.opacity='0';"></div>
                     <div class="filmisimpanel">
-                        <div class="filmisim">${dizi.isim.toUpperCase()}</div>
+                        <div class="filmisim">${displayName}</div>
                     </div>
                 `;
                 container.appendChild(item);
             });
+            checkInitialState();
         });
+
+        let currentScreen = 'anaSayfa';
 
         function showBolumler(diziID) {
             sessionStorage.setItem('currentDiziID', diziID);
@@ -380,55 +367,115 @@ def create_html_file(data):
                 diziler[diziID].bolumler.forEach(function(bolum) {
                     var item = document.createElement("div");
                     item.className = "filmpanel";
-                    var imgHtml = diziler[diziID].resim 
-                        ? `<img src="${diziler[diziID].resim}" onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;\\'>${diziler[diziID].isim.charAt(0)}</div>';">` 
-                        : `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#2a2a2a;font-size:24px;font-weight:bold;">${diziler[diziID].isim.charAt(0)}</div>`;
-
                     item.innerHTML = `
-                        <div class="filmresim">${imgHtml}</div>
+                        <div class="filmresim"><img src="${diziler[diziID].resim}" onerror="this.style.opacity='0';"></div>
                         <div class="filmisimpanel">
                             <div class="filmisim">${bolum.ad}</div>
                         </div>
                     `;
-                    item.onclick = function() { showPlayer(bolum.link); };
+                    item.onclick = function() { showPlayer(bolum.link, diziID); };
                     listContainer.appendChild(item);
                 });
+            } else {
+                listContainer.innerHTML = "<p>Bu dizi için bölüm bulunamadı.</p>";
             }
             document.querySelector("#diziListesiContainer").classList.add("hidden");
             document.getElementById("bolumler").classList.remove("hidden");
+            document.getElementById("geriBtn").style.display = "block";
+            currentScreen = 'bolumler';
+            history.replaceState({ page: 'bolumler', diziID: diziID }, '', '#bolumler-' + diziID);
         }
 
-        function showPlayer(streamUrl) {
+        function showPlayer(streamUrl, diziID) {
             document.getElementById("playerpanel").style.display = "flex";
             document.getElementById("bolumler").classList.add("hidden");
+            currentScreen = 'player';
+            history.pushState({ page: 'player', diziID: diziID, streamUrl: streamUrl }, '', '#player-' + diziID);
+            document.getElementById("main-player").innerHTML = "";
             const fullUrl = BRADMAX_BASE_URL + encodeURIComponent(streamUrl) + BRADMAX_PARAMS;
-            document.getElementById("main-player").innerHTML = `<iframe id="bradmax-iframe" src="${fullUrl}" allowfullscreen></iframe>`;
+            const iframeHtml = `<iframe id="bradmax-iframe" src="${fullUrl}" allowfullscreen tabindex="0" autofocus></iframe>`;
+            document.getElementById("main-player").innerHTML = iframeHtml;
         }
 
         function geriPlayer() {
             document.getElementById("playerpanel").style.display = "none";
             document.getElementById("bolumler").classList.remove("hidden");
             document.getElementById("main-player").innerHTML = "";
+            currentScreen = 'bolumler';
+            var currentDiziID = sessionStorage.getItem('currentDiziID');
+            history.replaceState({ page: 'bolumler', diziID: currentDiziID }, '', '#bolumler-' + currentDiziID);
         }
 
         function geriDon() {
+            sessionStorage.removeItem('currentDiziID');
             document.querySelector("#diziListesiContainer").classList.remove("hidden");
             document.getElementById("bolumler").classList.add("hidden");
+            document.getElementById("geriBtn").style.display = "none";
+            currentScreen = 'anaSayfa';
+            history.replaceState({ page: 'anaSayfa' }, '', '#anaSayfa');
+        }
+
+        window.addEventListener('popstate', function(event) {
+            var currentDiziID = sessionStorage.getItem('currentDiziID');
+            if (event.state && event.state.page === 'player' && event.state.diziID && event.state.streamUrl) {
+                showBolumler(event.state.diziID);
+                showPlayer(event.state.streamUrl, event.state.diziID);
+            } else if (event.state && event.state.page === 'bolumler' && event.state.diziID) {
+                showBolumler(event.state.diziID);
+            } else {
+                sessionStorage.removeItem('currentDiziID');
+                document.querySelector("#diziListesiContainer").classList.remove("hidden");
+                document.getElementById("bolumler").classList.add("hidden");
+                document.getElementById("playerpanel").style.display = "none";
+                document.getElementById("geriBtn").style.display = "none";
+                currentScreen = 'anaSayfa';
+            }
+        });
+
+        function checkInitialState() {
+            var hash = window.location.hash;
+            if (hash.startsWith('#bolumler-')) {
+                var diziID = hash.replace('#bolumler-', '');
+                showBolumler(diziID);
+            } else if (hash.startsWith('#player-')) {
+                var parts = hash.split('-');
+                var diziID = parts[1];
+                var streamUrl = sessionStorage.getItem('lastStreamUrl');
+                if (streamUrl) {
+                    showBolumler(diziID);
+                    setTimeout(() => { showPlayer(streamUrl, diziID); }, 100);
+                }
+            }
         }
 
         function searchSeries() {
-            var term = document.getElementById('seriesSearch').value.toLowerCase();
-            var panels = document.querySelectorAll('#diziListesiContainer .filmpanel');
+            var searchTerm = document.getElementById('seriesSearch').value.toLowerCase();
+            var container = document.getElementById('diziListesiContainer');
+            var panels = container.querySelectorAll('.filmpanel');
+            var found = false;
             panels.forEach(function(panel) {
-                var name = panel.querySelector('.filmisim').textContent.toLowerCase();
-                panel.style.display = name.includes(term) ? 'block' : 'none';
+                var seriesName = panel.querySelector('.filmisim').textContent.toLowerCase();
+                if (seriesName.includes(searchTerm)) { panel.style.display = 'block'; found = true; }
+                else { panel.style.display = 'none'; }
             });
+            if (!found) {
+                var noResults = document.createElement('div');
+                noResults.className = 'hataekran';
+                noResults.innerHTML = '<i class="fas fa-search"></i><div class="hatayazi">Sonuç bulunamadı!</div>';
+                container.appendChild(noResults);
+            }
             return false;
         }
 
         function resetSeriesSearch() {
-            document.querySelectorAll('#diziListesiContainer .filmpanel').forEach(p => p.style.display = 'block');
+            var container = document.getElementById('diziListesiContainer');
+            var panels = container.querySelectorAll('.filmpanel');
+            panels.forEach(function(panel) { panel.style.display = 'block'; });
+            var noResults = container.querySelector('.hataekran');
+            if (noResults) { noResults.remove(); }
         }
+
+        window.addEventListener('load', function() { setTimeout(checkInitialState, 100); });
     </script>
 </body>
 </html>'''
