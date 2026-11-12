@@ -14,10 +14,12 @@ jobs:
 
     steps:
       - name: Repo'yu Çek
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # tüm geçmişi al (rebase için gerekli)
 
       - name: Python Kur
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -34,12 +36,18 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name  "GitHub Actions"
 
-      - name: HTML Çıktısını Commit Et
+      - name: HTML Çıktısını Commit Et ve Push Et
         run: |
           git add showtv.html
+          
           if [[ -n $(git status --porcelain) ]]; then
-            git commit -m "ShowTV güncellendi [$(date +"%Y-%m-%d %H:%M:%S")]"
-            git push
+            git commit -m "ShowTV güncellendi [$(date +'%Y-%m-%d %H:%M:%S')]"
+            
+            # Remote'ta yeni commit varsa önce rebase ile al
+            git pull --rebase origin main
+            
+            # Push et
+            git push origin main
           else
             echo "Değişiklik yok, commit atlanıyor."
           fi
